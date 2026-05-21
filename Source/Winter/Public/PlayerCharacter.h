@@ -4,10 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "AbilitySystemInterface.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
-class WINTER_API APlayerCharacter : public ACharacter
+class WINTER_API APlayerCharacter : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -15,6 +16,15 @@ public:
 	// Sets default values for this character's properties
 	APlayerCharacter();
 
+	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+protected:
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
+	class UAbilitySystemComponent* AbilitySystemComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
+	class UPlayerStatAttributeSet* AttributeSet;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

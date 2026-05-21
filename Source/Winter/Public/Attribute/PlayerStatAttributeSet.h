@@ -27,27 +27,27 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
 	FGameplayAttributeData Health;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, Health)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, Health)
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
 	FGameplayAttributeData MaxHealth;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, MaxHealth)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, MaxHealth)
 
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Stamina")
 	FGameplayAttributeData Stamina;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, Stamina)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, Stamina)
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Stamina")
 	FGameplayAttributeData MaxStamina;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, MaxStamina)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, MaxStamina)
 
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Mentality")
 	FGameplayAttributeData Mentality;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, Mentality)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, Mentality)
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Mentality")
 	FGameplayAttributeData MaxMentality;
-	ATTRIBUTE_ACCESSORS(USurvivalAttributeSet, MaxMentality)
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, MaxMentality)
 };
