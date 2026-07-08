@@ -8,8 +8,8 @@ UPlayerStatAttributeSet::UPlayerStatAttributeSet()
 {
 	InitHealth(100.f);
 	InitMaxHealth(100.f);
-	InitStamina(100.f);
-	InitMaxStamina(100.f);
+	InitStamina(50.f);
+	InitMaxStamina(50.f);
 	InitMentality(100.f);
 	InitMaxMentality(100.f);
 }
@@ -24,7 +24,7 @@ void UPlayerStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMod
 
 		if (GetHealth() <= 0.0f)
 		{
-			//»ç¸Á
+			UE_LOG(LogTemp, Log, TEXT("»ç¸Á"));
 		}
 	}
 
