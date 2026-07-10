@@ -5,6 +5,10 @@
 #include "Attribute/PlayerStatAttributeSet.h" 
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Components/InteractableComponent.h"
+#include "DrawDebugHelpers.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -47,7 +51,7 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
+	CheckCrosshairHover();
 }
 
 // Called to bind functionality to input
@@ -55,6 +59,13 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::TryInteract);
+		}
+	}
 }
 
 void APlayerCharacter::OnSprintInput(bool bIsSprinting)
@@ -105,6 +116,63 @@ void APlayerCharacter::StartStaminaRegen()
 		if (SpecHandle.IsValid())
 		{
 			ActiveStaminaRegenHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
+}
+
+void APlayerCharacter::TryInteract()
+{
+	if (CurrentHoveredComponent)
+	{
+		CurrentHoveredComponent->Interact(this);
+	}
+}
+
+void APlayerCharacter::CheckCrosshairHover()
+{
+	if (!Controller)
+	{
+		return;
+	}
+
+	FVector StartLoc;
+	FRotator CamRot;
+	Controller->GetPlayerViewPoint(StartLoc, CamRot);
+
+	FVector EndLoc = StartLoc + (CamRot.Vector() * InteractRange);
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
+
+	//DrawDebugLine(GetWorld(), StartLoc, EndLoc, bHit ? FColor::Green : FColor::Red, false, -1.0f, 0, 2.0f);
+
+	UInteractableComponent* FoundComp = nullptr;
+
+	if (bHit && HitResult.GetActor())
+	{
+		UInteractableComponent* InteractComp = HitResult.GetActor()->FindComponentByClass<UInteractableComponent>();
+
+		if (InteractComp && InteractComp->CanInteract(this))
+		{
+			FoundComp = InteractComp;
+		}
+	}
+
+	if (FoundComp != CurrentHoveredComponent)
+	{
+		CurrentHoveredComponent = FoundComp;
+
+		if (CurrentHoveredComponent)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan, TEXT("C++ sign com"));
+			OnHoverInteractableChanged.Broadcast(true, CurrentHoveredComponent->PromptText);
+		}
+		else
+		{
+			OnHoverInteractableChanged.Broadcast(false, FString());
 		}
 	}
 }

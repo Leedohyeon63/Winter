@@ -10,7 +10,10 @@
 #include "UI/PlayerViewModel.h"
 #include "PlayerCharacter.generated.h"
 
+class UInputAction;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChanged, float, CurrentValue, float, MaxValue);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHoverInteractableChanged, bool, bIsInteractable, FString, PromptText);
 
 UCLASS()
 class WINTER_API APlayerCharacter : public ACharacter, public IAbilitySystemInterface
@@ -31,6 +34,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Stats")
 	FOnStatChanged OnMentalityChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "UI|Interaction")
+	FOnHoverInteractableChanged OnHoverInteractableChanged;
 protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
@@ -54,6 +60,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities|Effects")
 	TSubclassOf<class UGameplayEffect> StaminaRegenEffect;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	float InteractRange = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* InteractAction;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Interaction")
+	class UInteractableComponent* CurrentHoveredComponent;
+
 	FActiveGameplayEffectHandle ActiveStaminaDrainHandle;
 
 	FActiveGameplayEffectHandle ActiveStaminaRegenHandle;
@@ -73,6 +88,10 @@ protected:
 	void OnSprintInput(bool bIsSprinting);
 
 	void StartStaminaRegen();
+
+	void TryInteract();
+
+	void CheckCrosshairHover();
 
 	void HealthChangedCallback(const struct FOnAttributeChangeData& Data);
 	void StaminaChangedCallback(const struct FOnAttributeChangeData& Data);
