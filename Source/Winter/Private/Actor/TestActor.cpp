@@ -33,12 +33,7 @@ void ATestActor::OnHandledInteract(AActor* Interactor)
 {
 	if (Interactor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%s 가 %s 와 상호작용했습니다!"), *Interactor->GetName(), *GetName());
-	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, TEXT("상호작용 시스템 작동 완료!"));
+		UE_LOG(LogTemp, Warning, TEXT("상호작용"));
 	}
 }
 

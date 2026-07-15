@@ -8,12 +8,12 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInteractSignature, AActor*, Interactor);
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class WINTER_API UInteractableComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:	
+public:
 	// Sets default values for this component's properties
 	UInteractableComponent();
 
@@ -29,14 +29,24 @@ public:
 
 	// 외부(플레이어)에서 호출할 상호작용 함수
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
-	void Interact(AActor* Interactor);
+	bool Interact(AActor* Interactor);
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintPure, Category = "Interaction")
+	bool CanInteract(AActor* Interactor) const;
+	virtual bool CanInteract_Implementation(AActor* Interactor) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
-	virtual bool CanInteract(AActor* Interactor) const;
+	void SetInteractionEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	bool IsInteractionEnabled() const { return bInteractionEnabled; }
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	FString PromptText = TEXT("상호작용 [F]");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	bool bInteractionEnabled = true;
 
 
 };

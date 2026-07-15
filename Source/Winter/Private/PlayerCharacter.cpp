@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PlayerCharacter.h"
 #include "AbilitySystemComponent.h"
@@ -8,7 +8,10 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Components/InteractableComponent.h"
+#include "Components/PlayerInventoryComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -18,6 +21,7 @@ APlayerCharacter::APlayerCharacter()
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<UPlayerStatAttributeSet>(TEXT("AttributeSet"));
+	InventoryComponent =CreateDefaultSubobject<UPlayerInventoryComponent>(TEXT("InventoryComponent"));
 }
 
 UAbilitySystemComponent* APlayerCharacter::GetAbilitySystemComponent() const
@@ -59,11 +63,35 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem =
+				ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+			{
+				if (DefaultMappingContext)
+				{
+					InputSubsystem->AddMappingContext(DefaultMappingContext, DefaultMappingPriority);
+				}
+			}
+		}
+	}
+
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		if (InteractAction)
 		{
 			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::TryInteract);
+		}
+
+		if (InventoryAction)
+		{
+			EnhancedInputComponent->BindAction(
+				InventoryAction,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::RequestInventoryToggle);
 		}
 	}
 }
@@ -122,10 +150,20 @@ void APlayerCharacter::StartStaminaRegen()
 
 void APlayerCharacter::TryInteract()
 {
-	if (CurrentHoveredComponent)
+	CheckCrosshairHover();
+
+	if (IsValid(CurrentHoveredComponent) && CurrentHoveredComponent->CanInteract(this))
 	{
-		CurrentHoveredComponent->Interact(this);
+		if (CurrentHoveredComponent->Interact(this))
+		{
+			CheckCrosshairHover();
+		}
 	}
+}
+
+void APlayerCharacter::RequestInventoryToggle()
+{
+	OnInventoryToggleRequested.Broadcast();
 }
 
 void APlayerCharacter::CheckCrosshairHover()
@@ -167,7 +205,7 @@ void APlayerCharacter::CheckCrosshairHover()
 
 		if (CurrentHoveredComponent)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan, TEXT("C++ sign com"));
+			//GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan, TEXT("C++ sign com"));
 			OnHoverInteractableChanged.Broadcast(true, CurrentHoveredComponent->PromptText);
 		}
 		else

@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -11,9 +9,12 @@
 #include "PlayerCharacter.generated.h"
 
 class UInputAction;
+class UInputMappingContext;
+class UPlayerInventoryComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChanged, float, CurrentValue, float, MaxValue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHoverInteractableChanged, bool, bIsInteractable, FString, PromptText);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryToggleRequestedSignature);
 
 UCLASS()
 class WINTER_API APlayerCharacter : public ACharacter, public IAbilitySystemInterface
@@ -26,6 +27,12 @@ public:
 
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	UPlayerInventoryComponent* GetInventoryComponent() const
+	{
+		return InventoryComponent;
+	}
+
 	UPROPERTY(BlueprintAssignable, Category = "UI|Stats")
 	FOnStatChanged OnHealthChanged;
 
@@ -37,6 +44,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Interaction")
 	FOnHoverInteractableChanged OnHoverInteractableChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "UI|Inventory")
+	FOnInventoryToggleRequestedSignature OnInventoryToggleRequested;
 protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
@@ -44,6 +54,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
 	class UPlayerStatAttributeSet* AttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	UPlayerInventoryComponent* InventoryComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float WalkSpeed = 450.0f;
@@ -66,6 +79,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* InteractAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* InventoryAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	int32 DefaultMappingPriority = 0;
+
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Interaction")
 	class UInteractableComponent* CurrentHoveredComponent;
 
@@ -78,11 +100,11 @@ protected:
 protected:
 	virtual void BeginPlay() override;
 
-public:	
+public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	
+
 protected:
 	UFUNCTION(BlueprintCallable, Category = "UI|Stats")
 	void OnSprintInput(bool bIsSprinting);
@@ -90,6 +112,8 @@ protected:
 	void StartStaminaRegen();
 
 	void TryInteract();
+
+	void RequestInventoryToggle();
 
 	void CheckCrosshairHover();
 
