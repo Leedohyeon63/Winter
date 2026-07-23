@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Struct/InventoryTypeStruct.h"
+#include "Struct/PlayerTravelState.h"
 #include "PlayerInventoryComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChangedSignature);
@@ -81,6 +82,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory|Equipment")
 	TMap<EEquipmentSlot, UItemDefinitionDataAsset*> GetEquippedItems() const;
+
+	// [레벨 이동 추가] GameInstance 서브시스템이 레벨 이동 전후에 같은 인벤토리를 복원할 때 사용한다.
+	FInventoryTravelState CaptureTravelState() const;
+	void RestoreTravelState(const FInventoryTravelState& InState);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory|Capacity", meta = (ClampMin = "0"))

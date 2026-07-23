@@ -5,6 +5,7 @@
 #include "AbilitySystemInterface.h"
 #include "InputActionValue.h"
 #include "GameplayEffectTypes.h"
+#include "Struct/PlayerTravelState.h"
 #include "UI/PlayerViewModel.h"
 #include "PlayerCharacter.generated.h"
 
@@ -32,6 +33,9 @@ public:
 	{
 		return InventoryComponent;
 	}
+
+	FPlayerTravelState CaptureTravelState() const;
+	void RestoreTravelState(const FPlayerTravelState& InState);
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Stats")
 	FOnStatChanged OnHealthChanged;
@@ -114,6 +118,8 @@ protected:
 	void TryInteract();
 
 	void RequestInventoryToggle();
+
+	void RestoreAfterLevelTravel();
 
 	void CheckCrosshairHover();
 

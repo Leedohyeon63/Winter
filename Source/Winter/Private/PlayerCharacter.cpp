@@ -10,8 +10,10 @@
 #include "Components/InteractableComponent.h"
 #include "Components/PlayerInventoryComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
+#include "Subsystem/LevelTravelSubsystem.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -21,7 +23,7 @@ APlayerCharacter::APlayerCharacter()
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<UPlayerStatAttributeSet>(TEXT("AttributeSet"));
-	InventoryComponent =CreateDefaultSubobject<UPlayerInventoryComponent>(TEXT("InventoryComponent"));
+	InventoryComponent = CreateDefaultSubobject<UPlayerInventoryComponent>(TEXT("InventoryComponent"));
 }
 
 UAbilitySystemComponent* APlayerCharacter::GetAbilitySystemComponent() const
@@ -48,6 +50,59 @@ void APlayerCharacter::BeginPlay()
 		OnHealthChanged.Broadcast(AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
 		OnStaminaChanged.Broadcast(AttributeSet->GetStamina(), AttributeSet->GetMaxStamina());
 		OnMentalityChanged.Broadcast(AttributeSet->GetMentality(), AttributeSet->GetMaxMentality());
+	}
+
+	GetWorldTimerManager().SetTimerForNextTick(this, &APlayerCharacter::RestoreAfterLevelTravel);
+}
+
+FPlayerTravelState APlayerCharacter::CaptureTravelState() const
+{
+	FPlayerTravelState State;
+	if (!AttributeSet || !InventoryComponent)
+	{
+		return State;
+	}
+
+	State.Health = AttributeSet->GetHealth();
+	State.MaxHealth = AttributeSet->GetMaxHealth();
+	State.Stamina = AttributeSet->GetStamina();
+	State.MaxStamina = AttributeSet->GetMaxStamina();
+	State.Mentality = AttributeSet->GetMentality();
+	State.MaxMentality = AttributeSet->GetMaxMentality();
+	State.Inventory = InventoryComponent->CaptureTravelState();
+	State.bIsValid = true;
+	return State;
+}
+
+void APlayerCharacter::RestoreTravelState(const FPlayerTravelState& InState)
+{
+	if (!InState.bIsValid || !AbilitySystemComponent || !AttributeSet || !InventoryComponent)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), InState.MaxHealth);
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), FMath::Clamp(InState.Health, 0.0f, InState.MaxHealth));
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxStaminaAttribute(), InState.MaxStamina);
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetStaminaAttribute(), FMath::Clamp(InState.Stamina, 0.0f, InState.MaxStamina));
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxMentalityAttribute(), InState.MaxMentality);
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMentalityAttribute(), FMath::Clamp(InState.Mentality, 0.0f, InState.MaxMentality));
+
+	InventoryComponent->RestoreTravelState(InState.Inventory);
+
+	OnHealthChanged.Broadcast(AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
+	OnStaminaChanged.Broadcast(AttributeSet->GetStamina(), AttributeSet->GetMaxStamina());
+	OnMentalityChanged.Broadcast(AttributeSet->GetMentality(), AttributeSet->GetMaxMentality());
+}
+
+void APlayerCharacter::RestoreAfterLevelTravel()
+{
+	UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	if (ULevelTravelSubsystem* TravelSubsystem = GameInstance
+		? GameInstance->GetSubsystem<ULevelTravelSubsystem>()
+		: nullptr)
+	{
+		TravelSubsystem->RestorePlayerAfterTravel(this);
 	}
 }
 

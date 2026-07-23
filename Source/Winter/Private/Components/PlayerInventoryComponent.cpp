@@ -216,6 +216,23 @@ TMap<EEquipmentSlot, UItemDefinitionDataAsset*> UPlayerInventoryComponent::GetEq
 	return Result;
 }
 
+FInventoryTravelState UPlayerInventoryComponent::CaptureTravelState() const
+{
+	// [레벨 이동 추가] 아이템 스택과 장착 상태를 한 시점의 값으로 복사한다.
+	FInventoryTravelState State;
+	State.Items = Items;
+	State.EquippedItems = EquippedItems;
+	return State;
+}
+
+void UPlayerInventoryComponent::RestoreTravelState(const FInventoryTravelState& InState)
+{
+	// [레벨 이동 추가] 같은 플레이 세션에서 캡처한 유효한 상태를 그대로 복원한다.
+	Items = InState.Items;
+	EquippedItems = InState.EquippedItems;
+	BroadcastStateChanged();
+}
+
 void UPlayerInventoryComponent::AddItemUnchecked(UItemDefinitionDataAsset* Item, int32 Quantity)
 {
 	if (!Item || Quantity <= 0)
