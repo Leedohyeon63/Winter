@@ -13,6 +13,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
+#include "GameState/MainGameState.h"
 #include "Subsystem/LevelTravelSubsystem.h"
 
 // Sets default values
@@ -52,6 +53,7 @@ void APlayerCharacter::BeginPlay()
 		OnMentalityChanged.Broadcast(AttributeSet->GetMentality(), AttributeSet->GetMaxMentality());
 	}
 
+	// [레벨 이동 추가] 새 Pawn의 BeginPlay/빙의 순서 영향을 피하려고 다음 틱에 상태와 도착 위치를 복원한다.
 	GetWorldTimerManager().SetTimerForNextTick(this, &APlayerCharacter::RestoreAfterLevelTravel);
 }
 
@@ -63,6 +65,7 @@ FPlayerTravelState APlayerCharacter::CaptureTravelState() const
 		return State;
 	}
 
+	// [레벨 이동 추가] 현재 GAS 속성값과 장비 포함 인벤토리를 하나의 스냅샷으로 만든다.
 	State.Health = AttributeSet->GetHealth();
 	State.MaxHealth = AttributeSet->GetMaxHealth();
 	State.Stamina = AttributeSet->GetStamina();
@@ -81,6 +84,7 @@ void APlayerCharacter::RestoreTravelState(const FPlayerTravelState& InState)
 		return;
 	}
 
+	// [레벨 이동 추가] 최대값을 먼저 복원한 뒤 현재값을 제한해 잘못된 속성 범위를 막는다.
 	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), InState.MaxHealth);
 	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), FMath::Clamp(InState.Health, 0.0f, InState.MaxHealth));
 	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxStaminaAttribute(), InState.MaxStamina);
@@ -90,6 +94,7 @@ void APlayerCharacter::RestoreTravelState(const FPlayerTravelState& InState)
 
 	InventoryComponent->RestoreTravelState(InState.Inventory);
 
+	// [레벨 이동 추가] HUD가 초기 브로드캐스트 이후 생성됐거나 바인딩됐더라도 최종 복원값을 받게 한다.
 	OnHealthChanged.Broadcast(AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
 	OnStaminaChanged.Broadcast(AttributeSet->GetStamina(), AttributeSet->GetMaxStamina());
 	OnMentalityChanged.Broadcast(AttributeSet->GetMentality(), AttributeSet->GetMaxMentality());
@@ -97,6 +102,7 @@ void APlayerCharacter::RestoreTravelState(const FPlayerTravelState& InState)
 
 void APlayerCharacter::RestoreAfterLevelTravel()
 {
+	// [레벨 이동 추가] GameInstanceSubsystem은 OpenLevel에도 유지되므로 새 Pawn에 스냅샷을 적용할 수 있다.
 	UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (ULevelTravelSubsystem* TravelSubsystem = GameInstance
 		? GameInstance->GetSubsystem<ULevelTravelSubsystem>()
@@ -104,6 +110,29 @@ void APlayerCharacter::RestoreAfterLevelTravel()
 	{
 		TravelSubsystem->RestorePlayerAfterTravel(this);
 	}
+
+	// [멘탈리티 월드 상태 추가] 복원이 끝난 값을 사용하고, 새 레벨 구독자를 위해 같은 상태도 다시 알린다.
+	UpdateMentalityWorldState(true);
+}
+
+void APlayerCharacter::UpdateMentalityWorldState(bool bForceBroadcast)
+{
+	if (!AttributeSet || !GetWorld())
+	{
+		return;
+	}
+
+	AMainGameState* MainGameState = GetWorld()->GetGameState<AMainGameState>();
+	if (!MainGameState)
+	{
+		return;
+	}
+
+	// [멘탈리티 월드 상태 추가] Player는 원본 수치만 전달하고 상태 판정은 MainGameState 한 곳에서 수행한다.
+	MainGameState->UpdateMentalityWorldState(
+		AttributeSet->GetMentality(),
+		AttributeSet->GetMaxMentality(),
+		bForceBroadcast);
 }
 
 // Called every frame
@@ -317,6 +346,9 @@ void APlayerCharacter::MentalityChangedCallback(const FOnAttributeChangeData& Da
 	if (AttributeSet)
 	{
 		OnMentalityChanged.Broadcast(Data.NewValue, AttributeSet->GetMaxMentality());
+
+		// [멘탈리티 월드 상태 추가] GAS 값이 바뀔 때 중앙 계층이 새 단계를 계산하도록 요청한다.
+		UpdateMentalityWorldState(false);
 	}
 }
 

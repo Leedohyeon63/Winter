@@ -34,6 +34,7 @@ public:
 		return InventoryComponent;
 	}
 
+	// [레벨 이동 추가] 레벨 전환 서브시스템이 Pawn 재생성 전후의 플레이어 상태를 전달한다.
 	FPlayerTravelState CaptureTravelState() const;
 	void RestoreTravelState(const FPlayerTravelState& InState);
 
@@ -119,7 +120,11 @@ protected:
 
 	void RequestInventoryToggle();
 
+	// [레벨 이동 추가] 새 레벨에서 Controller와 포탈 액터가 준비된 다음 틱에 복원을 요청한다.
 	void RestoreAfterLevelTravel();
+
+	// [멘탈리티 월드 상태 추가] 현재 GAS 값을 MainGameState 중앙 계층에 전달한다.
+	void UpdateMentalityWorldState(bool bForceBroadcast);
 
 	void CheckCrosshairHover();
 
