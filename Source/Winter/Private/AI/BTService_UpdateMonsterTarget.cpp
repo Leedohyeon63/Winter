@@ -1,4 +1,4 @@
-#include "AI/BTService_UpdateMonsterTarget.h"
+ï»¿#include "AI/BTService_UpdateMonsterTarget.h"
 
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
@@ -13,7 +13,7 @@ UBTService_UpdateMonsterTarget::UBTService_UpdateMonsterTarget()
 {
 	NodeName = TEXT("Update Monster Target");
 
-	// [Behavior Tree º¯°æ] ÇÃ·¹ÀÌ¾î Å½»öÀº ¸Å ÇÁ·¹ÀÓÀÌ ¾Æ´Ï¶ó BT Service ÁÖ±â·Î ½ÇÇàÇÑ´Ù.
+	// [Behavior Tree ë³€ê²½] í”Œë ˆì´ì–´ íƒìƒ‰ì€ ë§¤ í”„ë ˆìž„ì´ ì•„ë‹ˆë¼ BT Service ì£¼ê¸°ë¡œ ì‹¤í–‰í•œë‹¤.
 	bNotifyTick = true;
 	Interval = 0.25f;
 	RandomDeviation = 0.05f;
@@ -26,6 +26,15 @@ UBTService_UpdateMonsterTarget::UBTService_UpdateMonsterTarget()
 	InAttackRangeKey.AddBoolFilter(
 		this,
 		GET_MEMBER_NAME_CHECKED(UBTService_UpdateMonsterTarget, InAttackRangeKey));
+
+	ThreatActorKey.AddObjectFilter(
+		this,
+		GET_MEMBER_NAME_CHECKED(UBTService_UpdateMonsterTarget, ThreatActorKey),
+		AActor::StaticClass());
+
+	IsFleeingKey.AddBoolFilter(
+		this,
+		GET_MEMBER_NAME_CHECKED(UBTService_UpdateMonsterTarget, IsFleeingKey));
 }
 
 void UBTService_UpdateMonsterTarget::TickNode(
@@ -45,18 +54,67 @@ void UBTService_UpdateMonsterTarget::TickNode(
 		return;
 	}
 
+	// [í•˜ìœ„ í˜¸í™˜] ìƒˆ ë„ì£¼ í‚¤ë¥¼ ì§€ì •í•˜ì§€ ì•Šì€ ê¸°ì¡´ BT ì—ì…‹ì—ì„œëŠ” ì´ë¦„ì´ Noneì´ë¯€ë¡œ í•´ë‹¹ ê°’ë§Œ ê±´ë“œë¦¬ì§€ ì•ŠëŠ”ë‹¤.
+	const bool bHasTargetActorKey = TargetActorKey.SelectedKeyName != NAME_None;
+	const bool bHasAttackRangeKey = InAttackRangeKey.SelectedKeyName != NAME_None;
+	const bool bHasThreatActorKey = ThreatActorKey.SelectedKeyName != NAME_None;
+	const bool bHasFleeingKey = IsFleeingKey.SelectedKeyName != NAME_None;
+
+	auto ClearCombatTarget = [&]()
+	{
+		if (bHasTargetActorKey)
+		{
+			Blackboard->ClearValue(TargetActorKey.SelectedKeyName);
+		}
+		if (bHasAttackRangeKey)
+		{
+			Blackboard->SetValueAsBool(InAttackRangeKey.SelectedKeyName, false);
+		}
+		if (AIController)
+		{
+			AIController->ClearFocus(EAIFocusPriority::Gameplay);
+		}
+	};
+
+	auto ClearFleeTarget = [&]()
+	{
+		if (bHasThreatActorKey)
+		{
+			Blackboard->ClearValue(ThreatActorKey.SelectedKeyName);
+		}
+		if (bHasFleeingKey)
+		{
+			Blackboard->SetValueAsBool(IsFleeingKey.SelectedKeyName, false);
+		}
+	};
+
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ë„ì£¼ ì¤‘ì—ëŠ” ì „íˆ¬ Targetì„ ë§Œë“¤ì§€ ì•Šê³  í”Œë ˆì´ì–´ë¥¼ Threatë¡œë§Œ ì œê³µí•œë‹¤.
+	if (Monster
+		&& !Monster->IsDead()
+		&& IsValid(Player)
+		&& Monster->ShouldContinueFleeingFrom(Player))
+	{
+		ClearCombatTarget();
+		if (bHasThreatActorKey)
+		{
+			Blackboard->SetValueAsObject(ThreatActorKey.SelectedKeyName, Player);
+		}
+		if (bHasFleeingKey)
+		{
+			Blackboard->SetValueAsBool(IsFleeingKey.SelectedKeyName, true);
+		}
+		return;
+	}
+
+	ClearFleeTarget();
+
 	if (!Monster
 		|| Monster->IsDead()
 		|| !IsValid(Player)
 		|| !Monster->CanEngageTarget(Player))
 	{
-		// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] ºñ¼±°ø°ú ¾ÆÁ÷ ÇÇ°ÝµÇÁö ¾ÊÀº Áß¸³ ¸ó½ºÅÍ´Â TargetÀ» ¸¸µéÁö ¾Ê´Â´Ù.
-		Blackboard->ClearValue(TargetActorKey.SelectedKeyName);
-		Blackboard->SetValueAsBool(InAttackRangeKey.SelectedKeyName, false);
-		if (AIController)
-		{
-			AIController->ClearFocus(EAIFocusPriority::Gameplay);
-		}
+		// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ë¹„ì„ ê³µê³¼ ì•„ì§ í”¼ê²©ë˜ì§€ ì•Šì€ ì¤‘ë¦½ ëª¬ìŠ¤í„°ëŠ” Targetì„ ë§Œë“¤ì§€ ì•ŠëŠ”ë‹¤.
+		ClearCombatTarget();
 		return;
 	}
 
@@ -65,20 +123,24 @@ void UBTService_UpdateMonsterTarget::TickNode(
 
 	if (DistanceSquared > FMath::Square(Monster->GetAggroRange()))
 	{
-		// [Behavior Tree º¯°æ] °¨Áö ¹üÀ§¸¦ ¹þ¾î³ª¸é TargetÀ» Áö¿ö ÃßÀû Branch°¡ ÀÚµ¿ Áß´ÜµÇ°Ô ÇÑ´Ù.
-		Blackboard->ClearValue(TargetActorKey.SelectedKeyName);
-		Blackboard->SetValueAsBool(InAttackRangeKey.SelectedKeyName, false);
-		AIController->ClearFocus(EAIFocusPriority::Gameplay);
+		// [Behavior Tree ë³€ê²½] ê°ì§€ ë²”ìœ„ë¥¼ ë²—ì–´ë‚˜ë©´ Targetì„ ì§€ì›Œ ì¶”ì  Branchê°€ ìžë™ ì¤‘ë‹¨ë˜ê²Œ í•œë‹¤.
+		ClearCombatTarget();
 		return;
 	}
 
-	Blackboard->SetValueAsObject(TargetActorKey.SelectedKeyName, Player);
+	if (bHasTargetActorKey)
+	{
+		Blackboard->SetValueAsObject(TargetActorKey.SelectedKeyName, Player);
+	}
 	AIController->SetFocus(Player, EAIFocusPriority::Gameplay);
 
 	const bool bInAttackRange =
 		DistanceSquared <= FMath::Square(Monster->GetAttackRange())
 		&& AIController->LineOfSightTo(Player);
 
-	// [Behavior Tree º¯°æ] °Å¸®¿Í ½Ã¾ß°¡ ¸ðµÎ ÃæÁ·µÅ¾ß °ø°Ý Sequence·Î ÀüÈ¯ÇÑ´Ù.
-	Blackboard->SetValueAsBool(InAttackRangeKey.SelectedKeyName, bInAttackRange);
+	// [Behavior Tree ë³€ê²½] ê±°ë¦¬ì™€ ì‹œì•¼ê°€ ëª¨ë‘ ì¶©ì¡±ë¼ì•¼ ê³µê²© Sequenceë¡œ ì „í™˜í•œë‹¤.
+	if (bHasAttackRangeKey)
+	{
+		Blackboard->SetValueAsBool(InAttackRangeKey.SelectedKeyName, bInAttackRange);
+	}
 }

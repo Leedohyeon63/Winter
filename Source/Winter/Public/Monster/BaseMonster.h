@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
@@ -13,8 +13,8 @@ class UStaticMeshComponent;
 struct FOnAttributeChangeData;
 
 /**
- * ¸ó½ºÅÍ°¡ ÇÃ·¹ÀÌ¾î¸¦ ÀûÀ¸·Î ÆÇ´ÜÇÏ´Â ±âº» ¼ºÇâÀÌ´Ù.
- * Aggressive´Â ¼±°ø, Passive´Â ºñ¼±°ø, NeutralÀº ÇÇ°İ ÈÄ Àû´ëÇÑ´Ù.
+ * ëª¬ìŠ¤í„°ê°€ í”Œë ˆì´ì–´ë¥¼ ì ìœ¼ë¡œ íŒë‹¨í•˜ëŠ” ê¸°ë³¸ ì„±í–¥ì´ë‹¤.
+ * AggressiveëŠ” ì„ ê³µ, PassiveëŠ” ë¹„ì„ ê³µ, Neutralì€ í”¼ê²© í›„ ì ëŒ€í•œë‹¤.
  */
 UENUM(BlueprintType)
 enum class EMonsterDisposition : uint8
@@ -34,8 +34,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMonsterDiedSignature);
 
 /**
- * ¿ÜÇü ¿¡¼Â ¾øÀÌµµ ½ºÆù¡¤ÃßÀû¡¤±ÙÁ¢ °ø°İ¡¤GAS Ã¼·ÂÀ» ½ÃÇèÇÒ ¼ö ÀÖ´Â ±âº» ¸ó½ºÅÍ.
- * ½ÇÁ¦ ¸ó½ºÅÍ´Â ÀÌ Å¬·¡½º¸¦ ºÎ¸ğ·Î ÇÑ Blueprint¿¡¼­ ¸Ş½Ã¿Í °ø°İ GameplayEffect¸¦ ÁöÁ¤ÇÑ´Ù.
+ * ì™¸í˜• ì—ì…‹ ì—†ì´ë„ ìŠ¤í°Â·ì¶”ì Â·ê·¼ì ‘ ê³µê²©Â·GAS ì²´ë ¥ì„ ì‹œí—˜í•  ìˆ˜ ìˆëŠ” ê¸°ë³¸ ëª¬ìŠ¤í„°.
+ * ì‹¤ì œ ëª¬ìŠ¤í„°ëŠ” ì´ í´ë˜ìŠ¤ë¥¼ ë¶€ëª¨ë¡œ í•œ Blueprintì—ì„œ ë©”ì‹œì™€ ê³µê²© GameplayEffectë¥¼ ì§€ì •í•œë‹¤.
  */
 UCLASS()
 class WINTER_API ABaseMonster : public ACharacter, public IAbilitySystemInterface
@@ -53,23 +53,37 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Monster|AI")
 	UBehaviorTree* GetBehaviorTreeAsset() const;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Blueprint¿Í BT º¸Á¶ ·ÎÁ÷¿¡¼­ ÇöÀç ¼±°ø/ºñ¼±°ø/Áß¸³ À¯ÇüÀ» È®ÀÎÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] Blueprintì™€ BT ë³´ì¡° ë¡œì§ì—ì„œ í˜„ì¬ ì„ ê³µ/ë¹„ì„ ê³µ/ì¤‘ë¦½ ìœ í˜•ì„ í™•ì¸í•œë‹¤.
 	UFUNCTION(BlueprintPure, Category = "Monster|AI|Disposition")
 	EMonsterDisposition GetDisposition() const { return Disposition; }
 
 	UFUNCTION(BlueprintPure, Category = "Monster|AI|Disposition")
 	bool IsProvoked() const { return bIsProvoked; }
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Àß¸ø ±¸¼ºµÈ BT¿¡¼­µµ ºñ¼±°ø ¸ó½ºÅÍ°¡ °ø°İÇÏÁö ¾Êµµ·Ï ÃÖÁ¾ ±³Àü °¡´É ¿©ºÎ¸¦ Á¦°øÇÑ´Ù.
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ë¹„ì„ ê³µ ëª¬ìŠ¤í„°ê°€ í”¼ê²© í›„ í˜„ì¬ ë„ì£¼ ì¤‘ì¸ì§€ BTì—ì„œ í™•ì¸í•œë‹¤.
+	UFUNCTION(BlueprintPure, Category = "Monster|AI|Disposition")
+	bool IsFleeing() const { return bIsFleeing; }
+
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì˜ëª» êµ¬ì„±ëœ BTì—ì„œë„ ë¹„ì„ ê³µ ëª¬ìŠ¤í„°ê°€ ê³µê²©í•˜ì§€ ì•Šë„ë¡ ìµœì¢… êµì „ ê°€ëŠ¥ ì—¬ë¶€ë¥¼ ì œê³µí•œë‹¤.
 	UFUNCTION(BlueprintPure, Category = "Monster|AI|Disposition")
 	bool CanEngageTarget(AActor* TargetActor) const;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ ¸ó½ºÅÍ¸¦ ½ºÅ©¸³Æ®³ª ÇÇ°İ Ã³¸®¿¡¼­ Àû´ë »óÅÂ·Î ÀüÈ¯ÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì¤‘ë¦½ ëª¬ìŠ¤í„°ë¥¼ ìŠ¤í¬ë¦½íŠ¸ë‚˜ í”¼ê²© ì²˜ë¦¬ì—ì„œ ì ëŒ€ ìƒíƒœë¡œ ì „í™˜í•œë‹¤.
 	UFUNCTION(BlueprintCallable, Category = "Monster|AI|Disposition")
 	void Provoke();
 
 	UFUNCTION(BlueprintCallable, Category = "Monster|AI|Disposition")
 	void ResetProvocation();
+
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] í”¼ê²©í•œ í”Œë ˆì´ì–´ì™€ì˜ ê±°ë¦¬ ë° ë„ì£¼ ì œí•œ ì‹œê°„ì„ ê²€ì‚¬í•˜ê³  ë§Œë£Œëœ ìƒíƒœë¥¼ ì •ë¦¬í•œë‹¤.
+	UFUNCTION(BlueprintCallable, Category = "Monster|AI|Disposition")
+	bool ShouldContinueFleeingFrom(AActor* ThreatActor);
+
+	UFUNCTION(BlueprintCallable, Category = "Monster|AI|Disposition")
+	void StartFleeing();
+
+	UFUNCTION(BlueprintCallable, Category = "Monster|AI|Disposition")
+	void ResetFleeing();
 
 	UFUNCTION(BlueprintPure, Category = "Monster|Combat")
 	float GetAttackRange() const { return AttackRange; }
@@ -77,7 +91,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Monster|Combat")
 	bool IsDead() const { return bIsDead; }
 
-	// [Behavior Tree º¯°æ] BT °ø°İ Task°¡ È£ÃâÇÏ¸ç ¼º°øÀûÀ¸·Î GameplayEffect¸¦ Àû¿ëÇß´ÂÁö ¹İÈ¯ÇÑ´Ù.
+	// [Behavior Tree ë³€ê²½] BT ê³µê²© Taskê°€ í˜¸ì¶œí•˜ë©° ì„±ê³µì ìœ¼ë¡œ GameplayEffectë¥¼ ì ìš©í–ˆëŠ”ì§€ ë°˜í™˜í•œë‹¤.
 	bool TryAttack(AActor* TargetActor);
 
 	UPROPERTY(BlueprintAssignable, Category = "Monster|Events")
@@ -89,34 +103,34 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// [¸ó½ºÅÍ Ãß°¡] ¸ó½ºÅÍ°¡ °ø°İ GameplayEffectÀÇ Source°¡ µÇµµ·Ï ÀÚÃ¼ ASC¸¦ °¡Áø´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ëª¬ìŠ¤í„°ê°€ ê³µê²© GameplayEffectì˜ Sourceê°€ ë˜ë„ë¡ ìì²´ ASCë¥¼ ê°€ì§„ë‹¤.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Abilities")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Abilities")
 	TObjectPtr<UMonsterStatAttributeSet> AttributeSet;
 
-	// [¸ó½ºÅÍ Ãß°¡] ½ºÄÌ·¹Å» ¸Ş½Ã°¡ ÁØºñµÇ±â Àü ½ºÆù°ú ÀÌµ¿À» ´«À¸·Î È®ÀÎÇÏ±â À§ÇÑ ÀÓ½Ã ¿ÜÇüÀÌ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ìŠ¤ì¼ˆë ˆíƒˆ ë©”ì‹œê°€ ì¤€ë¹„ë˜ê¸° ì „ ìŠ¤í°ê³¼ ì´ë™ì„ ëˆˆìœ¼ë¡œ í™•ì¸í•˜ê¸° ìœ„í•œ ì„ì‹œ ì™¸í˜•ì´ë‹¤.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Components")
 	TObjectPtr<UStaticMeshComponent> PlaceholderMesh;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] ¸ó½ºÅÍ Blueprint¸¶´Ù ¼±°ø/ºñ¼±°ø/Áß¸³ Áß ÇÏ³ª¸¦ ±âº»°ªÀ¸·Î ÁöÁ¤ÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ëª¬ìŠ¤í„° Blueprintë§ˆë‹¤ ì„ ê³µ/ë¹„ì„ ê³µ/ì¤‘ë¦½ ì¤‘ í•˜ë‚˜ë¥¼ ê¸°ë³¸ê°’ìœ¼ë¡œ ì§€ì •í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Disposition")
 	EMonsterDisposition Disposition = EMonsterDisposition::Aggressive;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] ¼±°ø ¸ó½ºÅÍ°¡ ÀÚµ¿ ½ÇÇàÇÒ Behavior Tree´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì„ ê³µ ëª¬ìŠ¤í„°ê°€ ìë™ ì‹¤í–‰í•  Behavior Treeë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Behavior Tree")
 	TObjectPtr<UBehaviorTree> AggressiveBehaviorTreeAsset;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] ºñ¼±°ø ¸ó½ºÅÍ°¡ ÀÚµ¿ ½ÇÇàÇÒ Behavior Tree´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ë¹„ì„ ê³µ ëª¬ìŠ¤í„°ê°€ ìë™ ì‹¤í–‰í•  Behavior Treeë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Behavior Tree")
 	TObjectPtr<UBehaviorTree> PassiveBehaviorTreeAsset;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ ¸ó½ºÅÍ°¡ ÀÚµ¿ ½ÇÇàÇÒ Behavior Tree´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì¤‘ë¦½ ëª¬ìŠ¤í„°ê°€ ìë™ ì‹¤í–‰í•  Behavior Treeë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Behavior Tree")
 	TObjectPtr<UBehaviorTree> NeutralBehaviorTreeAsset;
 
-	// [È£È¯ À¯Áö] ¼ºÇâ Àü¿ë Æ®¸®°¡ ºñ¾î ÀÖÀ¸¸é ±âÁ¸¿¡ ÁöÁ¤ÇÑ Behavior Tree¸¦ Æú¹éÀ¸·Î ½ÇÇàÇÑ´Ù.
+	// [í˜¸í™˜ ìœ ì§€] ì„±í–¥ ì „ìš© íŠ¸ë¦¬ê°€ ë¹„ì–´ ìˆìœ¼ë©´ ê¸°ì¡´ì— ì§€ì •í•œ Behavior Treeë¥¼ í´ë°±ìœ¼ë¡œ ì‹¤í–‰í•œë‹¤.
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
@@ -127,29 +141,41 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI", meta = (ClampMin = "0.0"))
 	float AggroRange = 2000.0f;
 
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ë§ˆì§€ë§‰ í”¼ê²© í›„ ì´ ì‹œê°„ì´ ì§€ë‚˜ë©´ ë„ì£¼ë¥¼ ëë‚¸ë‹¤. ë‹¤ì‹œ í”¼ê²©ë˜ë©´ ì‹œê°„ì´ ê°±ì‹ ëœë‹¤.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Flee", meta = (ClampMin = "0.0"))
+	float FleeDuration = 6.0f;
+
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ìœ„í˜‘ê³¼ ì´ ê±°ë¦¬ ì´ìƒ ë²Œì–´ì§€ë©´ ì œí•œ ì‹œê°„ì´ ë‚¨ì•„ ìˆì–´ë„ ë„ì£¼ë¥¼ ëë‚¸ë‹¤.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Flee", meta = (ClampMin = "0.0"))
+	float FleeSafeDistance = 2500.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat", meta = (ClampMin = "0.0"))
 	float AttackRange = 160.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat", meta = (ClampMin = "0.1"))
 	float AttackCooldown = 1.25f;
 
-	// [¸ó½ºÅÍ Ãß°¡] Instant GameplayEffect¿¡¼­ PlayerStatAttributeSet.Health¸¦ À½¼ö·Î º¯°æÇÏµµ·Ï Blueprint¿¡¼­ ÁöÁ¤ÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] Instant GameplayEffectì—ì„œ PlayerStatAttributeSet.Healthë¥¼ ìŒìˆ˜ë¡œ ë³€ê²½í•˜ë„ë¡ Blueprintì—ì„œ ì§€ì •í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat")
 	TSubclassOf<UGameplayEffect> AttackDamageEffect;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Death", meta = (ClampMin = "0.0"))
 	float DestroyDelayAfterDeath = 1.0f;
 
-	// [¸ó½ºÅÍ Ãß°¡] ³ªÁß¿¡ °ø°İ ¸ùÅ¸ÁÖ¸¦ ºÙÀÏ ¶§ Blueprint¿¡¼­ ½Ã°¢¡¤À½Çâ ¿¬ÃâÀ» ¿¬°áÇÒ ÁöÁ¡ÀÌ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ë‚˜ì¤‘ì— ê³µê²© ëª½íƒ€ì£¼ë¥¼ ë¶™ì¼ ë•Œ Blueprintì—ì„œ ì‹œê°Â·ìŒí–¥ ì—°ì¶œì„ ì—°ê²°í•  ì§€ì ì´ë‹¤.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|Combat")
 	void OnAttackStarted(AActor* TargetActor);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|Death")
 	void OnDeathStarted();
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ ¸ó½ºÅÍ°¡ Ã³À½ Àû´ë »óÅÂ°¡ µÉ ¶§ ¿¬ÃâÀ» ¿¬°áÇÒ Blueprint ÁöÁ¡ÀÌ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì¤‘ë¦½ ëª¬ìŠ¤í„°ê°€ ì²˜ìŒ ì ëŒ€ ìƒíƒœê°€ ë  ë•Œ ì—°ì¶œì„ ì—°ê²°í•  Blueprint ì§€ì ì´ë‹¤.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|AI|Disposition")
 	void OnProvoked();
+
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ë¹„ì„ ê³µ ëª¬ìŠ¤í„°ê°€ ì²˜ìŒ ë„ì£¼ ìƒíƒœì— ì§„ì…í•  ë•Œ ì—°ì¶œì„ ì—°ê²°í•  Blueprint ì§€ì ì´ë‹¤.
+	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|AI|Disposition")
+	void OnFleeStarted();
 
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
@@ -158,5 +184,7 @@ private:
 	float NextAttackAllowedTime = 0.0f;
 	bool bIsDead = false;
 	bool bIsProvoked = false;
+	bool bIsFleeing = false;
+	float FleeEndTime = 0.0f;
 };
 

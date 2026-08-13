@@ -1,4 +1,4 @@
-#include "Monster/BaseMonster.h"
+ï»¿#include "Monster/BaseMonster.h"
 
 #include "AI/MonsterAIController.h"
 #include "AbilitySystemComponent.h"
@@ -11,7 +11,7 @@
 
 ABaseMonster::ABaseMonster()
 {
-	// [Behavior Tree º¯°æ] ÆÇ´ÜÀº Behavior Tree Service/Task°¡ ´ã´çÇÏ¹Ç·Î ¸ó½ºÅÍ ¾×ÅÍ TickÀº »ç¿ëÇÏÁö ¾Ê´Â´Ù.
+	// [Behavior Tree ë³€ê²½] íŒë‹¨ì€ Behavior Tree Service/Taskê°€ ë‹´ë‹¹í•˜ë¯€ë¡œ ëª¬ìŠ¤í„° ì•¡í„° Tickì€ ì‚¬ìš©í•˜ì§€ ì•ŠëŠ”ë‹¤.
 	PrimaryActorTick.bCanEverTick = false;
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
@@ -26,7 +26,7 @@ ABaseMonster::ABaseMonster()
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 360.0f, 0.0f);
 	bUseControllerRotationYaw = false;
 
-	// [¸ó½ºÅÍ Ãß°¡] µ¿Àû ½ºÆù Á÷ÈÄ¿¡µµ AIController°¡ ÀÚµ¿À¸·Î ºùÀÇÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ë™ì  ìŠ¤í° ì§í›„ì—ë„ AIControllerê°€ ìë™ìœ¼ë¡œ ë¹™ì˜í•œë‹¤.
 	AIControllerClass = AMonsterAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
@@ -35,7 +35,7 @@ ABaseMonster::ABaseMonster()
 	PlaceholderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PlaceholderMesh->SetRelativeScale3D(FVector(0.7f, 0.7f, 1.6f));
 
-	// [¸ó½ºÅÍ Ãß°¡] ¿ÜÇüÀÌ ¾ø´Â ÇöÀç ´Ü°è¿¡¼­ ¿£Áø ±âº» Cube¸¦ ÀÓ½Ã ¸ó½ºÅÍ ¸öÃ¼·Î »ç¿ëÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ì™¸í˜•ì´ ì—†ëŠ” í˜„ì¬ ë‹¨ê³„ì—ì„œ ì—”ì§„ ê¸°ë³¸ Cubeë¥¼ ì„ì‹œ ëª¬ìŠ¤í„° ëª¸ì²´ë¡œ ì‚¬ìš©í•œë‹¤.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(
 		TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMeshFinder.Succeeded())
@@ -53,7 +53,7 @@ UBehaviorTree* ABaseMonster::GetBehaviorTreeAsset() const
 {
 	UBehaviorTree* SelectedTree = nullptr;
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] AIController°¡ ÇÏ³ªÀÇ Getter¸¸ È£ÃâÇØµµ ÇöÀç ¼ºÇâ¿¡ ¸Â´Â Tree¸¦ ¼±ÅÃÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] AIControllerê°€ í•˜ë‚˜ì˜ Getterë§Œ í˜¸ì¶œí•´ë„ í˜„ì¬ ì„±í–¥ì— ë§ëŠ” Treeë¥¼ ì„ íƒí•œë‹¤.
 	switch (Disposition)
 	{
 	case EMonsterDisposition::Aggressive:
@@ -72,7 +72,7 @@ UBehaviorTree* ABaseMonster::GetBehaviorTreeAsset() const
 		break;
 	}
 
-	// [È£È¯ À¯Áö] ±âÁ¸ BP_BaseMonsterÀÇ BehaviorTreeAsset ¼³Á¤À» ±×´ë·Î »ç¿ëÇÒ ¼ö ÀÖ°Ô ÇÑ´Ù.
+	// [í˜¸í™˜ ìœ ì§€] ê¸°ì¡´ BP_BaseMonsterì˜ BehaviorTreeAsset ì„¤ì •ì„ ê·¸ëŒ€ë¡œ ì‚¬ìš©í•  ìˆ˜ ìˆê²Œ í•œë‹¤.
 	return SelectedTree ? SelectedTree : BehaviorTreeAsset.Get();
 }
 
@@ -108,18 +108,68 @@ void ABaseMonster::Provoke()
 		return;
 	}
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ »óÅÂ´Â Ã¹ ÇÇ°İ ÈÄ °è¼Ó Àû´ëÇÏ¸ç ÇÊ¿äÇÏ¸é Blueprint¿¡¼­ ¿¬ÃâÀ» ½ÇÇàÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì¤‘ë¦½ ìƒíƒœëŠ” ì²« í”¼ê²© í›„ ê³„ì† ì ëŒ€í•˜ë©° í•„ìš”í•˜ë©´ Blueprintì—ì„œ ì—°ì¶œì„ ì‹¤í–‰í•œë‹¤.
 	bIsProvoked = true;
 	OnProvoked();
 }
 
 void ABaseMonster::ResetProvocation()
 {
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ ¸ó½ºÅÍ¸¸ ´Ù½Ã ºñÀû´ë »óÅÂ·Î µÇµ¹¸± ¼ö ÀÖ´Ù.
+	// [ëª¬ìŠ¤í„° ì„±í–¥ ì¶”ê°€] ì¤‘ë¦½ ëª¬ìŠ¤í„°ë§Œ ë‹¤ì‹œ ë¹„ì ëŒ€ ìƒíƒœë¡œ ë˜ëŒë¦´ ìˆ˜ ìˆë‹¤.
 	if (Disposition == EMonsterDisposition::Neutral)
 	{
 		bIsProvoked = false;
 	}
+}
+
+bool ABaseMonster::ShouldContinueFleeingFrom(AActor* ThreatActor)
+{
+	if (bIsDead
+		|| Disposition != EMonsterDisposition::Passive
+		|| !bIsFleeing
+		|| !GetWorld())
+	{
+		return false;
+	}
+
+	const bool bDurationExpired = GetWorld()->GetTimeSeconds() >= FleeEndTime;
+	const bool bReachedSafeDistance = IsValid(ThreatActor)
+		&& FVector::DistSquared(GetActorLocation(), ThreatActor->GetActorLocation())
+			>= FMath::Square(FleeSafeDistance);
+
+	if (bDurationExpired || bReachedSafeDistance)
+	{
+		ResetFleeing();
+		return false;
+	}
+
+	return true;
+}
+
+void ABaseMonster::StartFleeing()
+{
+	if (bIsDead
+		|| Disposition != EMonsterDisposition::Passive
+		|| !GetWorld())
+	{
+		return;
+	}
+
+	const bool bWasAlreadyFleeing = bIsFleeing;
+	bIsFleeing = true;
+	FleeEndTime = GetWorld()->GetTimeSeconds() + FleeDuration;
+
+	// [ë¹„ì„ ê³µ ë„ì£¼ ì¶”ê°€] ì—°ì† í”¼ê²©ì€ ë„ì£¼ ì‹œê°„ë§Œ ì—°ì¥í•˜ê³  ì‹œì‘ ì—°ì¶œì€ í•œ ë²ˆë§Œ ì‹¤í–‰í•œë‹¤.
+	if (!bWasAlreadyFleeing)
+	{
+		OnFleeStarted();
+	}
+}
+
+void ABaseMonster::ResetFleeing()
+{
+	bIsFleeing = false;
+	FleeEndTime = 0.0f;
 }
 
 void ABaseMonster::BeginPlay()
@@ -133,7 +183,7 @@ void ABaseMonster::BeginPlay()
 
 	if (AbilitySystemComponent && AttributeSet)
 	{
-		// [¸ó½ºÅÍ Ãß°¡] GAS·Î Ã¼·ÂÀÌ º¯°æµÇ¸é UI È®Àå ÁöÁ¡°ú »ç¸Á Ã³¸®¸¦ µ¿½Ã¿¡ °»½ÅÇÑ´Ù.
+		// [ëª¬ìŠ¤í„° ì¶”ê°€] GASë¡œ ì²´ë ¥ì´ ë³€ê²½ë˜ë©´ UI í™•ì¥ ì§€ì ê³¼ ì‚¬ë§ ì²˜ë¦¬ë¥¼ ë™ì‹œì— ê°±ì‹ í•œë‹¤.
 		AbilitySystemComponent
 			->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute())
 			.AddUObject(this, &ABaseMonster::HandleHealthChanged);
@@ -176,7 +226,7 @@ bool ABaseMonster::TryAttack(AActor* TargetActor)
 		return false;
 	}
 
-	// [¸ó½ºÅÍ Ãß°¡] ¸ó½ºÅÍ ASC¿¡¼­ SpecÀ» ¸¸µé¾î ÇÃ·¹ÀÌ¾î ASC¿¡ Àû¿ëÇÏ¹Ç·Î Instigator¿Í Source°¡ º¸Á¸µÈ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ëª¬ìŠ¤í„° ASCì—ì„œ Specì„ ë§Œë“¤ì–´ í”Œë ˆì´ì–´ ASCì— ì ìš©í•˜ë¯€ë¡œ Instigatorì™€ Sourceê°€ ë³´ì¡´ëœë‹¤.
 	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
 	EffectContext.AddInstigator(this, this);
 	EffectContext.AddSourceObject(this);
@@ -208,10 +258,17 @@ void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
 
 	OnMonsterHealthChanged.Broadcast(Data.NewValue, AttributeSet->GetMaxHealth());
 
-	// [¸ó½ºÅÍ ¼ºÇâ Ãß°¡] Áß¸³ ¸ó½ºÅÍ´Â »ıÁ¸ÇÑ Ã¤ ½ÇÁ¦ Ã¼·ÂÀÌ °¨¼ÒÇßÀ» ¶§¸¸ Àû´ë »óÅÂ°¡ µÈ´Ù.
+	// [ì„±í–¥ë³„ í”¼ê²© ë°˜ì‘] ì¤‘ë¦½ì€ ì „íˆ¬ ìƒíƒœë¡œ, ë¹„ì„ ê³µì€ ë„ì£¼ ìƒíƒœë¡œ ì „í™˜í•œë‹¤.
 	if (Data.NewValue > 0.0f && Data.NewValue < Data.OldValue)
 	{
-		Provoke();
+		if (Disposition == EMonsterDisposition::Neutral)
+		{
+			Provoke();
+		}
+		else if (Disposition == EMonsterDisposition::Passive)
+		{
+			StartFleeing();
+		}
 	}
 
 	if (Data.NewValue <= 0.0f)
@@ -228,8 +285,10 @@ void ABaseMonster::Die()
 	}
 
 	bIsDead = true;
+	bIsProvoked = false;
+	ResetFleeing();
 
-	// [¸ó½ºÅÍ Ãß°¡] »ç¸Á Á÷ÈÄ ÀÌµ¿°ú Ãæµ¹À» ÁßÁöÇÏ°í ½ºÆ÷³Ê°¡ ´ÙÀ½ °Ë»ç¿¡¼­ Á¤¸®ÇÒ ¼ö ÀÖµµ·Ï ¼ö¸íÀ¸·Î ÆÄ±«ÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] ì‚¬ë§ ì§í›„ ì´ë™ê³¼ ì¶©ëŒì„ ì¤‘ì§€í•˜ê³  ìŠ¤í¬ë„ˆê°€ ë‹¤ìŒ ê²€ì‚¬ì—ì„œ ì •ë¦¬í•  ìˆ˜ ìˆë„ë¡ ìˆ˜ëª…ìœ¼ë¡œ íŒŒê´´í•œë‹¤.
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -238,7 +297,7 @@ void ABaseMonster::Die()
 	OnMonsterDied.Broadcast();
 	OnDeathStarted();
 
-	// [¸ó½ºÅÍ Ãß°¡] SetLifeSpan(0)Àº ÆÄ±« ¿¹¾àÀ» Ãë¼ÒÇÏ¹Ç·Î 0ÃÊ ¼³Á¤Àº Áï½Ã Destroy·Î Ã³¸®ÇÑ´Ù.
+	// [ëª¬ìŠ¤í„° ì¶”ê°€] SetLifeSpan(0)ì€ íŒŒê´´ ì˜ˆì•½ì„ ì·¨ì†Œí•˜ë¯€ë¡œ 0ì´ˆ ì„¤ì •ì€ ì¦‰ì‹œ Destroyë¡œ ì²˜ë¦¬í•œë‹¤.
 	if (DestroyDelayAfterDeath <= KINDA_SMALL_NUMBER)
 	{
 		Destroy();
