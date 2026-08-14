@@ -135,7 +135,7 @@ bool ABaseMonster::ShouldContinueFleeingFrom(AActor* ThreatActor)
 	const bool bDurationExpired = GetWorld()->GetTimeSeconds() >= FleeEndTime;
 	const bool bReachedSafeDistance = IsValid(ThreatActor)
 		&& FVector::DistSquared(GetActorLocation(), ThreatActor->GetActorLocation())
-			>= FMath::Square(FleeSafeDistance);
+		>= FMath::Square(FleeSafeDistance);
 
 	if (bDurationExpired || bReachedSafeDistance)
 	{

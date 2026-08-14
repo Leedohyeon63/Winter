@@ -2,13 +2,14 @@
 
 #include "PlayerCharacter.h"
 #include "AbilitySystemComponent.h"
-#include "Attribute/PlayerStatAttributeSet.h" 
+#include "Attribute/PlayerStatAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Components/InteractableComponent.h"
 #include "Components/PlayerInventoryComponent.h"
+#include "Components/WeaponManagerComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -25,6 +26,8 @@ APlayerCharacter::APlayerCharacter()
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<UPlayerStatAttributeSet>(TEXT("AttributeSet"));
 	InventoryComponent = CreateDefaultSubobject<UPlayerInventoryComponent>(TEXT("InventoryComponent"));
+	// [웨폰 매니저 추가] 인벤토리 장비 상태를 사용하는 공격 컴포넌트를 기본 서브오브젝트로 생성한다.
+	WeaponManagerComponent = CreateDefaultSubobject<UWeaponManagerComponent>(TEXT("WeaponManagerComponent"));
 }
 
 UAbilitySystemComponent* APlayerCharacter::GetAbilitySystemComponent() const
@@ -177,6 +180,25 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 				this,
 				&APlayerCharacter::RequestInventoryToggle);
 		}
+
+		if (WeaponAttackAction)
+		{
+			// [웨폰 매니저 추가] Started를 사용해 키를 누르고 있어도 공격 요청이 한 번만 발생하게 한다.
+			EnhancedInputComponent->BindAction(
+				WeaponAttackAction,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::TryWeaponAttack);
+		}
+
+		if (SwitchWeaponAction)
+		{
+			EnhancedInputComponent->BindAction(
+				SwitchWeaponAction,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::SwitchActiveWeapon);
+		}
 	}
 }
 
@@ -248,6 +270,22 @@ void APlayerCharacter::TryInteract()
 void APlayerCharacter::RequestInventoryToggle()
 {
 	OnInventoryToggleRequested.Broadcast();
+}
+
+void APlayerCharacter::TryWeaponAttack()
+{
+	if (WeaponManagerComponent)
+	{
+		WeaponManagerComponent->StartAttack();
+	}
+}
+
+void APlayerCharacter::SwitchActiveWeapon()
+{
+	if (WeaponManagerComponent)
+	{
+		WeaponManagerComponent->SwitchWeapon();
+	}
 }
 
 void APlayerCharacter::CheckCrosshairHover()
@@ -351,4 +389,3 @@ void APlayerCharacter::MentalityChangedCallback(const FOnAttributeChangeData& Da
 		UpdateMentalityWorldState(false);
 	}
 }
-
