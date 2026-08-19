@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -13,7 +13,7 @@
 	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 /**
- * 
+ *
  */
 UCLASS()
 class WINTER_API UPlayerStatAttributeSet : public UAttributeSet
@@ -29,9 +29,14 @@ public:
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, Health)
 
-		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, MaxHealth)
+
+	// [공통 데미지 처리 추가] GameplayEffect가 전달한 양수 피해를 잠시 받은 뒤 Health에서 차감하는 메타 속성이다.
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	FGameplayAttributeData IncomingDamage;
+	ATTRIBUTE_ACCESSORS(UPlayerStatAttributeSet, IncomingDamage)
 
 
 		UPROPERTY(BlueprintReadOnly, Category = "Attributes|Stamina")

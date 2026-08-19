@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -10,7 +10,7 @@ class UPrimitiveComponent;
 class UProjectileMovementComponent;
 class USphereComponent;
 
-/** WeaponManager°¡ »ı¼ºÇÏ¸ç Ãæµ¹ÇÑ ASC ´ë»ó¿¡°Ô ÁöÁ¤µÈ GameplayEffect¸¦ ÇÑ ¹ø Àû¿ëÇÑ´Ù. */
+/** WeaponManagerê°€ ìƒì„±í•˜ë©° ì¶©ëŒí•œ ASC ëŒ€ìƒì—ê²Œ ì§€ì •ëœ GameplayEffectë¥¼ í•œ ë²ˆ ì ìš©í•œë‹¤. */
 UCLASS(Blueprintable)
 class WINTER_API AWeaponProjectile : public AActor
 {
@@ -19,12 +19,13 @@ class WINTER_API AWeaponProjectile : public AActor
 public:
 	AWeaponProjectile();
 
-	// [Åõ»çÃ¼ Ãß°¡] »ı¼ºÇÑ WeaponManager°¡ °ø°İ ÃâÃ³¿Í ÇÇÇØ È¿°ú¸¦ Àü´ŞÇÑ´Ù.
+	// [íˆ¬ì‚¬ì²´ ì¶”ê°€] ìƒì„±í•œ WeaponManagerê°€ ê³µê²© ì¶œì²˜ì™€ í”¼í•´ íš¨ê³¼ë¥¼ ì „ë‹¬í•œë‹¤.
 	void InitializeProjectile(
 		AActor* InAttackOwner,
 		UAbilitySystemComponent* InSourceAbilitySystem,
 		TSubclassOf<UGameplayEffect> InDamageEffect,
 		UObject* InSourceObject,
+		float InDamageAmount,
 		float InSpeed,
 		float InLifeSeconds);
 
@@ -66,4 +67,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UObject> DamageSourceObject;
+
+	// [ê³µí†µ ë°ë¯¸ì§€ ì²˜ë¦¬ ì¶”ê°€] ì¶©ëŒ ì‹œ Data.Damage SetByCallerë¡œ ì „ë‹¬í•  ì–‘ìˆ˜ í”¼í•´ëŸ‰ì´ë‹¤.
+	float DamageAmount = 0.0f;
+
+	// [íˆ¬ì‚¬ì²´ ì•ˆì •ì„± ë³´ì™„] ê°™ì€ í”„ë ˆì„ì˜ Overlap/Hit ì¤‘ë³µ í˜¸ì¶œë¡œ í”¼í•´ê°€ ë‘ ë²ˆ ë“¤ì–´ê°€ëŠ” ê²ƒì„ ë§‰ëŠ”ë‹¤.
+	bool bHasImpacted = false;
 };

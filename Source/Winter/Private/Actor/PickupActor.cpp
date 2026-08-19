@@ -4,16 +4,24 @@
 #include "Components/StaticMeshComponent.h"
 #include "DataAsset/ItemDefinitionDataAsset.h"
 #include "Components/PlayerInventoryComponent.h"
+#include "Components/SceneComponent.h"
+
 
 APickupActor::APickupActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	// [픽업 컴포넌트 구조 수정] 메시를 Root로 사용하지 않아 메시 스케일이 콜리전에 전달되지 않게 한다.
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-	SetRootComponent(MeshComponent);
+	MeshComponent->SetupAttachment(SceneRoot);
 
 	InteractionCollision = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionCollision"));
-	InteractionCollision->SetupAttachment(MeshComponent);
+
+	// [픽업 컴포넌트 구조 수정] 콜리전을 메시가 아닌 공통 SceneRoot에 부착한다.
+	InteractionCollision->SetupAttachment(SceneRoot);
 	InteractionCollision->InitSphereRadius(100.0f);
 
 	InteractionCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -22,7 +30,8 @@ APickupActor::APickupActor()
 	InteractionCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	InteractionCollision->SetGenerateOverlapEvents(false);
 
-	InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
+	InteractableComponent =
+		CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
 }
 
 void APickupActor::BeginPlay()

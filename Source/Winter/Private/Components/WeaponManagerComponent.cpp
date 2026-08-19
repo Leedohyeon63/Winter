@@ -1,14 +1,18 @@
-#include "Components/WeaponManagerComponent.h"
+﻿#include "Components/WeaponManagerComponent.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Actor/WeaponProjectile.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Combat/WinterCombat.h"
 #include "Components/PlayerInventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "GameplayEffect.h"
+#include "Kismet/GameplayStatics.h"
 #include "WinterGameplayTags.h"
 
 UWeaponManagerComponent::UWeaponManagerComponent()
@@ -26,7 +30,7 @@ void UWeaponManagerComponent::BeginPlay()
 
 	if (InventoryComponent)
 	{
-		// [���� �Ŵ��� �߰�] ����/������ ���� �̵� ���� �� Ȱ�� ���⸦ �ڵ����� �ٽ� Ȯ���Ѵ�.
+		// [웨폰 매니저 추가] 장착/해제와 레벨 이동 복원 후 활성 무기를 자동으로 다시 확인한다.
 		InventoryComponent->OnInventoryChanged.AddDynamic(
 			this,
 			&UWeaponManagerComponent::HandleInventoryChanged);
@@ -37,6 +41,9 @@ void UWeaponManagerComponent::BeginPlay()
 
 void UWeaponManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// [공격 대기 안정성 보완] 레벨 이동이나 액터 제거 중 남은 AnimNotify 공격을 폐기한다.
+	CancelPendingAttack();
+
 	if (InventoryComponent)
 	{
 		InventoryComponent->OnInventoryChanged.RemoveDynamic(
@@ -53,10 +60,17 @@ bool UWeaponManagerComponent::StartAttack()
 
 	UItemDefinitionDataAsset* WeaponDefinition = GetActiveWeapon();
 	UWorld* World = GetWorld();
+	IAbilitySystemInterface* OwnerAbilityInterface = Cast<IAbilitySystemInterface>(GetOwner());
+	UAbilitySystemComponent* OwnerAbilitySystem = OwnerAbilityInterface
+		? OwnerAbilityInterface->GetAbilitySystemComponent()
+		: nullptr;
 	if (!WeaponDefinition
 		|| !World
+		|| !OwnerAbilitySystem
+		|| OwnerAbilitySystem->HasMatchingGameplayTag(WinterGameplayTags::State_Dead)
 		|| !WeaponDefinition->AttackTypeTag.IsValid()
 		|| !WeaponDefinition->AttackDamageEffect
+		|| WeaponDefinition->AttackDamage <= 0.0f
 		|| PendingAttackWeapon)
 	{
 		return false;
@@ -69,7 +83,7 @@ bool UWeaponManagerComponent::StartAttack()
 	if ((!bIsMelee && !bIsHitscan && !bIsProjectile)
 		|| (bIsProjectile && !WeaponDefinition->ProjectileClass))
 	{
-		// [���� �Ŵ��� �߰�] �߸� ������ ����� ��ٿ�� ��Ÿ�ְ� ���۵Ǳ� ���� �ź��Ѵ�.
+		// [웨폰 매니저 추가] 잘못 설정된 무기는 쿨다운과 몽타주가 시작되기 전에 거부한다.
 		return false;
 	}
 
@@ -87,9 +101,20 @@ bool UWeaponManagerComponent::StartAttack()
 		? CharacterOwner->PlayAnimMontage(WeaponDefinition->AttackMontage)
 		: 0.0f;
 
-	// [���� �Ŵ��� �߰�] ��ȿ�� ��Ÿ�ֿ� Notify ������ ��� ���� ���� ������ ����Ѵ�.
+	// [웨폰 매니저 추가] 유효한 몽타주와 Notify 설정이 모두 있을 때만 판정을 대기한다.
 	if (WeaponDefinition->bExecuteAttackOnAnimNotify && MontageDuration > 0.0f)
 	{
+		// [공격 대기 안정성 보완] Notify가 실행되지 않아도 몽타주 종료 시 대기 상태가 자동으로 해제된다.
+		PendingAttackMontage = WeaponDefinition->AttackMontage;
+		if (CharacterOwner && CharacterOwner->GetMesh())
+		{
+			if (UAnimInstance* AnimInstance = CharacterOwner->GetMesh()->GetAnimInstance())
+			{
+				FOnMontageEnded MontageEndedDelegate;
+				MontageEndedDelegate.BindUObject(this, &UWeaponManagerComponent::HandleAttackMontageEnded);
+				AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, PendingAttackMontage.Get());
+			}
+		}
 		return true;
 	}
 
@@ -100,6 +125,7 @@ bool UWeaponManagerComponent::ExecutePendingAttack()
 {
 	UItemDefinitionDataAsset* WeaponDefinition = PendingAttackWeapon.Get();
 	PendingAttackWeapon = nullptr;
+	PendingAttackMontage = nullptr;
 
 	if (!WeaponDefinition)
 	{
@@ -125,9 +151,24 @@ bool UWeaponManagerComponent::ExecutePendingAttack()
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("WeaponManager: �������� �ʴ� AttackTypeTag�Դϴ�: %s"),
+		TEXT("WeaponManager: 지원하지 않는 AttackTypeTag입니다: %s"),
 		*AttackType.ToString());
 	return false;
+}
+
+void UWeaponManagerComponent::CancelPendingAttack()
+{
+	// [공격 대기 안정성 보완] 이미 실행된 Notify와 이후 MontageEnded가 겹쳐도 포인터 초기화만 수행한다.
+	PendingAttackWeapon = nullptr;
+	PendingAttackMontage = nullptr;
+}
+
+void UWeaponManagerComponent::HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (PendingAttackMontage.Get() == Montage)
+	{
+		CancelPendingAttack();
+	}
 }
 
 bool UWeaponManagerComponent::SwitchWeapon()
@@ -154,8 +195,8 @@ bool UWeaponManagerComponent::SetActiveWeaponSlot(EEquipmentSlot NewSlot)
 		return true;
 	}
 
-	// [���� �Ŵ��� �߰�] ���� ��ȯ �� ���� ������ ��� �� AnimNotify ������ ������� �ʵ��� ����Ѵ�.
-	PendingAttackWeapon = nullptr;
+	// [웨폰 매니저 추가] 무기 전환 시 이전 무기의 대기 중 AnimNotify 공격이 실행되지 않도록 취소한다.
+	CancelPendingAttack();
 	ActiveWeaponSlot = NewSlot;
 	RefreshActiveWeapon();
 	return true;
@@ -195,7 +236,7 @@ void UWeaponManagerComponent::RefreshActiveWeapon()
 
 	if (PendingAttackWeapon && PendingAttackWeapon != CurrentWeapon)
 	{
-		PendingAttackWeapon = nullptr;
+		CancelPendingAttack();
 	}
 
 	if (LastActiveWeapon != CurrentWeapon)
@@ -268,30 +309,49 @@ bool UWeaponManagerComponent::ExecuteMeleeAttack(UItemDefinitionDataAsset* Weapo
 
 bool UWeaponManagerComponent::ExecuteHitscanAttack(UItemDefinitionDataAsset* WeaponDefinition)
 {
-	APawn* PawnOwner = Cast<APawn>(GetOwner());
+	ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner());
 	UWorld* World = GetWorld();
-	if (!PawnOwner || !World || !WeaponDefinition || !WeaponDefinition->AttackDamageEffect)
+	if (!CharacterOwner || !World || !WeaponDefinition || !WeaponDefinition->AttackDamageEffect)
 	{
 		return false;
 	}
 
-	FVector Start = PawnOwner->GetActorLocation();
-	FRotator ViewRotation = PawnOwner->GetActorRotation();
-	if (AController* OwnerController = PawnOwner->GetController())
+	FVector CameraStart = CharacterOwner->GetActorLocation();
+	FRotator ViewRotation = CharacterOwner->GetActorRotation();
+	if (AController* OwnerController = CharacterOwner->GetController())
 	{
-		OwnerController->GetPlayerViewPoint(Start, ViewRotation);
+		OwnerController->GetPlayerViewPoint(CameraStart, ViewRotation);
 	}
 
-	const FVector End = Start
+	const FVector CameraEnd = CameraStart
 		+ ViewRotation.Vector() * FMath::Max(0.0f, WeaponDefinition->AttackRange);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WeaponHitscan), true, PawnOwner);
-	QueryParams.AddIgnoredActor(PawnOwner);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WeaponHitscan), true, CharacterOwner);
+	QueryParams.AddIgnoredActor(CharacterOwner);
 
-	FHitResult HitResult;
-	const bool bHit = World->LineTraceSingleByChannel(
-		HitResult,
-		Start,
-		End,
+	FHitResult CameraHit;
+	const bool bCameraHit = World->LineTraceSingleByChannel(
+		CameraHit,
+		CameraStart,
+		CameraEnd,
+		ECC_Visibility,
+		QueryParams);
+	const FVector AimPoint = bCameraHit ? CameraHit.ImpactPoint : CameraEnd;
+
+	FVector TraceStart = CameraStart;
+	if (USkeletalMeshComponent* CharacterMesh = CharacterOwner->GetMesh())
+	{
+		if (CharacterMesh->DoesSocketExist(WeaponDefinition->ProjectileSocketName))
+		{
+			TraceStart = CharacterMesh->GetSocketLocation(WeaponDefinition->ProjectileSocketName);
+		}
+	}
+
+	// [히트스캔 판정 보완] 카메라 조준점까지 총구에서 다시 검사해 총구 앞 벽을 관통하지 못하게 한다.
+	FHitResult FinalHit;
+	const bool bFinalHit = World->LineTraceSingleByChannel(
+		FinalHit,
+		TraceStart,
+		AimPoint,
 		ECC_Visibility,
 		QueryParams);
 
@@ -299,16 +359,16 @@ bool UWeaponManagerComponent::ExecuteHitscanAttack(UItemDefinitionDataAsset* Wea
 	{
 		DrawDebugLine(
 			World,
-			Start,
-			bHit ? HitResult.ImpactPoint : End,
-			bHit ? FColor::Green : FColor::Red,
+			TraceStart,
+			bFinalHit ? FinalHit.ImpactPoint : AimPoint,
+			bFinalHit ? FColor::Green : FColor::Red,
 			false,
 			1.0f,
 			0,
 			2.0f);
 	}
 
-	return bHit && ApplyDamageEffect(HitResult.GetActor(), WeaponDefinition, &HitResult);
+	return bFinalHit && ApplyDamageEffect(FinalHit.GetActor(), WeaponDefinition, &FinalHit);
 }
 
 bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* WeaponDefinition)
@@ -336,23 +396,43 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 		}
 	}
 
+	FVector AimPoint = SpawnLocation + SpawnRotation.Vector() * WeaponDefinition->AttackRange;
 	if (AController* OwnerController = CharacterOwner->GetController())
 	{
 		FVector ViewLocation;
-		OwnerController->GetPlayerViewPoint(ViewLocation, SpawnRotation);
+		FRotator ViewRotation;
+		OwnerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+		const FVector ViewEnd = ViewLocation
+			+ ViewRotation.Vector() * FMath::Max(0.0f, WeaponDefinition->AttackRange);
+
+		FCollisionQueryParams AimQueryParams(SCENE_QUERY_STAT(WeaponProjectileAim), true, CharacterOwner);
+		AimQueryParams.AddIgnoredActor(CharacterOwner);
+		FHitResult AimHit;
+		AimPoint = World->LineTraceSingleByChannel(
+			AimHit,
+			ViewLocation,
+			ViewEnd,
+			ECC_Visibility,
+			AimQueryParams)
+			? AimHit.ImpactPoint
+			: ViewEnd;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = CharacterOwner;
-	SpawnParameters.Instigator = CharacterOwner;
-	SpawnParameters.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	// [투사체 조준 보완] 카메라와 평행하게 쏘지 않고 실제 총구에서 조준점을 향하도록 회전한다.
+	const FVector AimDirection = AimPoint - SpawnLocation;
+	if (!AimDirection.IsNearlyZero())
+	{
+		SpawnRotation = AimDirection.Rotation();
+	}
 
-	AWeaponProjectile* Projectile = World->SpawnActor<AWeaponProjectile>(
+	const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
+	// [투사체 안정성 보완] 충돌과 이동이 시작되기 전에 공격 정보를 모두 전달하기 위해 지연 생성한다.
+	AWeaponProjectile* Projectile = World->SpawnActorDeferred<AWeaponProjectile>(
 		WeaponDefinition->ProjectileClass,
-		SpawnLocation,
-		SpawnRotation,
-		SpawnParameters);
+		SpawnTransform,
+		CharacterOwner,
+		CharacterOwner,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 	if (!Projectile)
 	{
@@ -365,8 +445,10 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 		AbilityInterface ? AbilityInterface->GetAbilitySystemComponent() : nullptr,
 		WeaponDefinition->AttackDamageEffect,
 		WeaponDefinition,
+		WeaponDefinition->AttackDamage,
 		WeaponDefinition->ProjectileSpeed,
 		WeaponDefinition->ProjectileLifeSeconds);
+	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 	return true;
 }
 
@@ -381,36 +463,22 @@ bool UWeaponManagerComponent::ApplyDamageEffect(
 	}
 
 	IAbilitySystemInterface* SourceInterface = Cast<IAbilitySystemInterface>(GetOwner());
-	IAbilitySystemInterface* TargetInterface = Cast<IAbilitySystemInterface>(TargetActor);
 	UAbilitySystemComponent* SourceAbilitySystem = SourceInterface
 		? SourceInterface->GetAbilitySystemComponent()
 		: nullptr;
-	UAbilitySystemComponent* TargetAbilitySystem = TargetInterface
-		? TargetInterface->GetAbilitySystemComponent()
-		: nullptr;
 
-	if (!SourceAbilitySystem || !TargetAbilitySystem || !WeaponDefinition->AttackDamageEffect)
+	if (!SourceAbilitySystem || !WeaponDefinition->AttackDamageEffect)
 	{
 		return false;
 	}
 
-	FGameplayEffectContextHandle EffectContext = SourceAbilitySystem->MakeEffectContext();
-	EffectContext.AddInstigator(GetOwner(), GetOwner());
-	EffectContext.AddSourceObject(WeaponDefinition);
-	if (HitResult)
-	{
-		EffectContext.AddHitResult(*HitResult, true);
-	}
-
-	const FGameplayEffectSpecHandle SpecHandle = SourceAbilitySystem->MakeOutgoingSpec(
+	// [공통 데미지 처리 추가] 세 공격 타입 모두 같은 SetByCaller 피해 전달 경로를 사용한다.
+	return WinterCombat::ApplyDamageEffect(
+		SourceAbilitySystem,
+		GetOwner(),
+		TargetActor,
 		WeaponDefinition->AttackDamageEffect,
-		1.0f,
-		EffectContext);
-	if (!SpecHandle.IsValid())
-	{
-		return false;
-	}
-
-	TargetAbilitySystem->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-	return true;
+		WeaponDefinition->AttackDamage,
+		WeaponDefinition,
+		HitResult);
 }

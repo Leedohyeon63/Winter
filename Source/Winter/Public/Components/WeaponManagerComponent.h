@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -6,6 +6,7 @@
 #include "WeaponManagerComponent.generated.h"
 
 class UAbilitySystemComponent;
+class UAnimMontage;
 class UPlayerInventoryComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -16,8 +17,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	ActiveWeapon);
 
 /**
- * ÇÃ·¹ÀÌ¾îÀÇ ÁÖ¹«±â/º¸Á¶¹«±â¸¦ ¼±ÅÃÇÏ°í ¹«±âÀÇ AttackTypeTag¿¡ ¸Â´Â ÆÇÁ¤À» ½ÇÇàÇÑ´Ù.
- * ¾ÆÀÌÅÛ º¸°ü°ú ÀåÂøÀº ±âÁ¸ PlayerInventoryComponent¿¡ ¸Ã±â°í ÀÌ ÄÄÆ÷³ÍÆ®´Â ÀüÅõ¸¸ ´ã´çÇÑ´Ù.
+ * í”Œë ˆì´ì–´ì˜ ì£¼ë¬´ê¸°/ë³´ì¡°ë¬´ê¸°ë¥¼ ì„ íƒí•˜ê³  ë¬´ê¸°ì˜ AttackTypeTagì— ë§ëŠ” íŒì •ì„ ì‹¤í–‰í•œë‹¤.
+ * ì•„ì´í…œ ë³´ê´€ê³¼ ì¥ì°©ì€ ê¸°ì¡´ PlayerInventoryComponentì— ë§¡ê¸°ê³  ì´ ì»´í¬ë„ŒíŠ¸ëŠ” ì „íˆ¬ë§Œ ë‹´ë‹¹í•œë‹¤.
  */
 UCLASS(ClassGroup = (Combat), meta = (BlueprintSpawnableComponent))
 class WINTER_API UWeaponManagerComponent : public UActorComponent
@@ -30,13 +31,17 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Weapon|Events")
 	FOnActiveWeaponChangedSignature OnActiveWeaponChanged;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] ÇöÀç È°¼º ¹«±â·Î °ø°İÀ» ½ÃÀÛÇÏ°í Äğ´Ù¿î ¶Ç´Â Àß¸øµÈ ¼³Á¤ÀÌ¸é false¸¦ ¹İÈ¯ÇÑ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] í˜„ì¬ í™œì„± ë¬´ê¸°ë¡œ ê³µê²©ì„ ì‹œì‘í•˜ê³  ì¿¨ë‹¤ìš´ ë˜ëŠ” ì˜ëª»ëœ ì„¤ì •ì´ë©´ falseë¥¼ ë°˜í™˜í•œë‹¤.
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Attack")
 	bool StartAttack();
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] AnimNotify¿¡¼­ È£ÃâÇØ ´ë±â ÁßÀÎ ±ÙÁ¢/Áï¹ß/Åõ»çÃ¼ ÆÇÁ¤À» ÇÑ ¹ø¸¸ ½ÇÇàÇÑ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] AnimNotifyì—ì„œ í˜¸ì¶œí•´ ëŒ€ê¸° ì¤‘ì¸ ê·¼ì ‘/ì¦‰ë°œ/íˆ¬ì‚¬ì²´ íŒì •ì„ í•œ ë²ˆë§Œ ì‹¤í–‰í•œë‹¤.
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Attack")
 	bool ExecutePendingAttack();
+
+	// [ê³µê²© ëŒ€ê¸° ì•ˆì •ì„± ë³´ì™„] ëª½íƒ€ì£¼ ì¤‘ë‹¨Â·ì‚¬ë§Â·ë¬´ê¸° ì „í™˜ ì‹œ ë‚¨ì€ ê³µê²© íŒì •ì„ ëª…ì‹œì ìœ¼ë¡œ ì·¨ì†Œí•œë‹¤.
+	UFUNCTION(BlueprintCallable, Category = "Weapon|Attack")
+	void CancelPendingAttack();
 
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Equipment")
 	bool SwitchWeapon();
@@ -54,13 +59,15 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] °³¹ß Áß ÆÇÁ¤ ¹üÀ§¸¦ ¿ùµå¿¡ Ç¥½ÃÇÒÁö ÁöÁ¤ÇÑ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] ê°œë°œ ì¤‘ íŒì • ë²”ìœ„ë¥¼ ì›”ë“œì— í‘œì‹œí• ì§€ ì§€ì •í•œë‹¤.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Debug")
 	bool bDrawDebugTraces = false;
 
 private:
 	UFUNCTION()
 	void HandleInventoryChanged();
+
+	void HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	void RefreshActiveWeapon();
 	bool ExecuteMeleeAttack(UItemDefinitionDataAsset* WeaponDefinition);
@@ -82,6 +89,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UItemDefinitionDataAsset> PendingAttackWeapon;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> PendingAttackMontage;
 
 	float NextAttackAllowedTime = 0.0f;
 };

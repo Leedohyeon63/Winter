@@ -6,6 +6,7 @@
 #include "BaseMonster.generated.h"
 
 class UAbilitySystemComponent;
+class UAnimMontage;
 class UBehaviorTree;
 class UGameplayEffect;
 class UMonsterStatAttributeSet;
@@ -94,6 +95,14 @@ public:
 	// [Behavior Tree 변경] BT 공격 Task가 호출하며 성공적으로 GameplayEffect를 적용했는지 반환한다.
 	bool TryAttack(AActor* TargetActor);
 
+	// [몬스터 공격 판정 보완] 공격 몽타주의 AnimNotify가 호출하면 전방 적중 검사를 실행한다.
+	UFUNCTION(BlueprintCallable, Category = "Monster|Combat")
+	bool ExecutePendingAttack();
+
+	// [몬스터 공격 판정 보완] 공격 중단·사망 시 남은 판정을 취소한다.
+	UFUNCTION(BlueprintCallable, Category = "Monster|Combat")
+	void CancelPendingAttack();
+
 	UPROPERTY(BlueprintAssignable, Category = "Monster|Events")
 	FOnMonsterHealthChangedSignature OnMonsterHealthChanged;
 
@@ -155,9 +164,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat", meta = (ClampMin = "0.1"))
 	float AttackCooldown = 1.25f;
 
+	// [공통 데미지 처리 추가] Data.Damage SetByCaller로 플레이어에게 전달할 기본 피해량이다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat", meta = (ClampMin = "0.0"))
+	float AttackDamage = 10.0f;
+
+	// [몬스터 공격 판정 보완] 전방 Sphere Sweep의 반지름이다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat", meta = (ClampMin = "1.0"))
+	float AttackRadius = 55.0f;
+
 	// [몬스터 추가] Instant GameplayEffect에서 PlayerStatAttributeSet.Health를 음수로 변경하도록 Blueprint에서 지정한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat")
 	TSubclassOf<UGameplayEffect> AttackDamageEffect;
+
+	// [몬스터 공격 판정 보완] 지정하면 C++에서 재생하고 Notify 시점에 실제 피해 판정을 실행할 수 있다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat|Animation")
+	TObjectPtr<UAnimMontage> AttackMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat|Animation")
+	bool bExecuteAttackOnAnimNotify = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Death", meta = (ClampMin = "0.0"))
 	float DestroyDelayAfterDeath = 1.0f;
@@ -179,12 +203,19 @@ protected:
 
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
+	void HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void Die();
 
 	float NextAttackAllowedTime = 0.0f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> PendingAttackTarget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> PendingAttackMontage;
+
 	bool bIsDead = false;
 	bool bIsProvoked = false;
 	bool bIsFleeing = false;
 	float FleeEndTime = 0.0f;
 };
-

@@ -17,6 +17,7 @@ class UWeaponManagerComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChanged, float, CurrentValue, float, MaxValue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHoverInteractableChanged, bool, bIsInteractable, FString, PromptText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryToggleRequestedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerDiedSignature);
 
 UCLASS()
 class WINTER_API APlayerCharacter : public ACharacter, public IAbilitySystemInterface
@@ -46,6 +47,9 @@ public:
 	FPlayerTravelState CaptureTravelState() const;
 	void RestoreTravelState(const FPlayerTravelState& InState);
 
+	UFUNCTION(BlueprintPure, Category = "Player|State")
+	bool IsDead() const { return bIsDead; }
+
 	UPROPERTY(BlueprintAssignable, Category = "UI|Stats")
 	FOnStatChanged OnHealthChanged;
 
@@ -60,6 +64,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "UI|Inventory")
 	FOnInventoryToggleRequestedSignature OnInventoryToggleRequested;
+
+	// [플레이어 사망 처리 추가] 게임오버 UI나 리스폰 로직이 구독할 수 있는 사망 이벤트다.
+	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
+	FOnPlayerDiedSignature OnPlayerDied;
 protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
@@ -155,6 +163,10 @@ protected:
 	void HealthChangedCallback(const struct FOnAttributeChangeData& Data);
 	void StaminaChangedCallback(const struct FOnAttributeChangeData& Data);
 	void MentalityChangedCallback(const struct FOnAttributeChangeData& Data);
+
+	void Die();
+
+	bool bIsDead = false;
 
 
 };

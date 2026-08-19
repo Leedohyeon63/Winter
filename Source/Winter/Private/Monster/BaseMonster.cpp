@@ -2,12 +2,18 @@
 
 #include "AI/MonsterAIController.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Attribute/MonsterStatAttributeSet.h"
+#include "Combat/WinterCombat.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "UObject/ConstructorHelpers.h"
+#include "WinterGameplayTags.h"
 
 ABaseMonster::ABaseMonster()
 {
@@ -80,6 +86,17 @@ bool ABaseMonster::CanEngageTarget(AActor* TargetActor) const
 {
 	if (bIsDead || !IsValid(TargetActor))
 	{
+		return false;
+	}
+
+	IAbilitySystemInterface* TargetAbilityInterface = Cast<IAbilitySystemInterface>(TargetActor);
+	UAbilitySystemComponent* TargetAbilitySystem = TargetAbilityInterface
+		? TargetAbilityInterface->GetAbilitySystemComponent()
+		: nullptr;
+	if (!TargetAbilitySystem
+		|| TargetAbilitySystem->HasMatchingGameplayTag(WinterGameplayTags::State_Dead))
+	{
+		// [사망 상태 추가] 플레이어가 사망하면 BT Service가 전투 Target을 자동으로 비우게 한다.
 		return false;
 	}
 
@@ -199,6 +216,8 @@ bool ABaseMonster::TryAttack(AActor* TargetActor)
 		|| !CanEngageTarget(TargetActor)
 		|| !AbilitySystemComponent
 		|| !AttackDamageEffect
+		|| AttackDamage <= 0.0f
+		|| PendingAttackTarget
 		|| !GetWorld())
 	{
 		return false;
@@ -216,37 +235,110 @@ bool ABaseMonster::TryAttack(AActor* TargetActor)
 		return false;
 	}
 
-	IAbilitySystemInterface* TargetAbilityInterface = Cast<IAbilitySystemInterface>(TargetActor);
-	UAbilitySystemComponent* TargetAbilitySystem = TargetAbilityInterface
-		? TargetAbilityInterface->GetAbilitySystemComponent()
-		: nullptr;
-
-	if (!TargetAbilitySystem)
-	{
-		return false;
-	}
-
-	// [몬스터 추가] 몬스터 ASC에서 Spec을 만들어 플레이어 ASC에 적용하므로 Instigator와 Source가 보존된다.
-	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-	EffectContext.AddInstigator(this, this);
-	EffectContext.AddSourceObject(this);
-
-	const FGameplayEffectSpecHandle SpecHandle =
-		AbilitySystemComponent->MakeOutgoingSpec(AttackDamageEffect, 1.0f, EffectContext);
-
-	if (!SpecHandle.IsValid())
-	{
-		return false;
-	}
-
 	const FVector ToTarget = TargetActor->GetActorLocation() - GetActorLocation();
 	SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
 
-	OnAttackStarted(TargetActor);
-	TargetAbilitySystem->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-
+	// [몬스터 공격 판정 보완] 공격 시작 시 대상만 보관하고 실제 피해는 Notify 또는 즉시 판정 함수에서 처리한다.
+	PendingAttackTarget = TargetActor;
 	NextAttackAllowedTime = CurrentTime + AttackCooldown;
-	return true;
+
+	const float MontageDuration = AttackMontage ? PlayAnimMontage(AttackMontage.Get()) : 0.0f;
+	// [몬스터 공격 판정 보완] C++ 몽타주 시작 후 Blueprint 이벤트는 음향·파티클 같은 추가 연출에 사용한다.
+	OnAttackStarted(TargetActor);
+	if (bExecuteAttackOnAnimNotify && MontageDuration > 0.0f)
+	{
+		PendingAttackMontage = AttackMontage;
+		if (GetMesh())
+		{
+			if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+			{
+				FOnMontageEnded MontageEndedDelegate;
+				MontageEndedDelegate.BindUObject(this, &ABaseMonster::HandleAttackMontageEnded);
+				AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, PendingAttackMontage.Get());
+			}
+		}
+		return true;
+	}
+
+	return ExecutePendingAttack();
+}
+
+bool ABaseMonster::ExecutePendingAttack()
+{
+	AActor* TargetActor = PendingAttackTarget.Get();
+	PendingAttackTarget = nullptr;
+	PendingAttackMontage = nullptr;
+
+	if (bIsDead
+		|| !IsValid(TargetActor)
+		|| !CanEngageTarget(TargetActor)
+		|| !AbilitySystemComponent
+		|| !AttackDamageEffect
+		|| !GetWorld())
+	{
+		return false;
+	}
+
+	const FVector Start = GetActorLocation()
+		+ FVector::UpVector * GetSimpleCollisionHalfHeight() * 0.5f;
+	const FVector End = Start + GetActorForwardVector() * FMath::Max(0.0f, AttackRange);
+	const float Radius = FMath::Max(1.0f, AttackRadius);
+
+	FCollisionObjectQueryParams ObjectQuery;
+	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(MonsterMeleeSweep), false, this);
+	QueryParams.AddIgnoredActor(this);
+
+	TArray<FHitResult> HitResults;
+	GetWorld()->SweepMultiByObjectType(
+		HitResults,
+		Start,
+		End,
+		FQuat::Identity,
+		ObjectQuery,
+		FCollisionShape::MakeSphere(Radius),
+		QueryParams);
+
+	for (const FHitResult& HitResult : HitResults)
+	{
+		if (HitResult.GetActor() != TargetActor)
+		{
+			continue;
+		}
+
+		AController* MonsterController = GetController();
+		if (MonsterController && !MonsterController->LineOfSightTo(TargetActor))
+		{
+			return false;
+		}
+
+		// [공통 데미지 처리 추가] 플레이어 무기와 같은 Data.Damage SetByCaller 경로로 피해를 전달한다.
+		return WinterCombat::ApplyDamageEffect(
+			AbilitySystemComponent,
+			this,
+			TargetActor,
+			AttackDamageEffect,
+			AttackDamage,
+			this,
+			&HitResult);
+	}
+
+	return false;
+}
+
+void ABaseMonster::CancelPendingAttack()
+{
+	PendingAttackTarget = nullptr;
+	PendingAttackMontage = nullptr;
+}
+
+void ABaseMonster::HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (PendingAttackMontage.Get() == Montage)
+	{
+		// [몬스터 공격 판정 보완] Notify 없이 몽타주가 끝났거나 중단되면 다음 공격이 막히지 않게 정리한다.
+		CancelPendingAttack();
+	}
 }
 
 void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
@@ -287,6 +379,12 @@ void ABaseMonster::Die()
 	bIsDead = true;
 	bIsProvoked = false;
 	ResetFleeing();
+	CancelPendingAttack();
+	if (AbilitySystemComponent)
+	{
+		// [사망 상태 추가] 투사체나 동일 프레임의 추가 피해가 사망한 몬스터에 적용되지 않게 한다.
+		AbilitySystemComponent->AddLooseGameplayTag(WinterGameplayTags::State_Dead);
+	}
 
 	// [몬스터 추가] 사망 직후 이동과 충돌을 중지하고 스포너가 다음 검사에서 정리할 수 있도록 수명으로 파괴한다.
 	GetCharacterMovement()->StopMovementImmediately();

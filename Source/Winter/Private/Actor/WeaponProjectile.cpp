@@ -1,7 +1,6 @@
-#include "Actor/WeaponProjectile.h"
+﻿#include "Actor/WeaponProjectile.h"
 
-#include "AbilitySystemComponent.h"
-#include "AbilitySystemInterface.h"
+#include "Combat/WinterCombat.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameplayEffect.h"
@@ -13,7 +12,8 @@ AWeaponProjectile::AWeaponProjectile()
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
 	SetRootComponent(CollisionComponent);
 	CollisionComponent->InitSphereRadius(8.0f);
-	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	// [투사체 안정성 보완] 공격 정보가 주입될 때까지 충돌을 비활성화한다.
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	CollisionComponent->SetCollisionObjectType(ECC_WorldDynamic);
 	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
@@ -28,6 +28,7 @@ AWeaponProjectile::AWeaponProjectile()
 	ProjectileMovement->MaxSpeed = 2000.0f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->ProjectileGravityScale = 0.0f;
+	ProjectileMovement->bAutoActivate = false;
 }
 
 void AWeaponProjectile::InitializeProjectile(
@@ -35,6 +36,7 @@ void AWeaponProjectile::InitializeProjectile(
 	UAbilitySystemComponent* InSourceAbilitySystem,
 	TSubclassOf<UGameplayEffect> InDamageEffect,
 	UObject* InSourceObject,
+	float InDamageAmount,
 	float InSpeed,
 	float InLifeSeconds)
 {
@@ -42,10 +44,12 @@ void AWeaponProjectile::InitializeProjectile(
 	SourceAbilitySystem = InSourceAbilitySystem;
 	DamageEffect = InDamageEffect;
 	DamageSourceObject = InSourceObject;
+	DamageAmount = FMath::Max(0.0f, InDamageAmount);
+	bHasImpacted = false;
 
 	if (CollisionComponent && InAttackOwner)
 	{
-		// [����ü �߰�] ���� ���� ������ �ڽ��� Capsule�� ���� ��� �ı����� �ʰ� �Ѵ�.
+		// [투사체 추가] 생성 직후 공격자 자신의 Capsule과 겹쳐 즉시 파괴되지 않게 한다.
 		CollisionComponent->IgnoreActorWhenMoving(InAttackOwner, true);
 	}
 
@@ -55,6 +59,13 @@ void AWeaponProjectile::InitializeProjectile(
 		ProjectileMovement->InitialSpeed = ResolvedSpeed;
 		ProjectileMovement->MaxSpeed = ResolvedSpeed;
 		ProjectileMovement->Velocity = GetActorForwardVector() * ResolvedSpeed;
+		ProjectileMovement->Activate(true);
+	}
+
+	if (CollisionComponent)
+	{
+		// [투사체 안정성 보완] 출처와 피해 값이 준비된 뒤에만 충돌 판정을 시작한다.
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 
 	SetLifeSpan(FMath::Max(0.1f, InLifeSeconds));
@@ -68,8 +79,15 @@ void AWeaponProjectile::HandleOverlap(
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
+	if (bHasImpacted)
+	{
+		return;
+	}
+
 	if (TryApplyDamage(OtherActor, bFromSweep ? &SweepResult : nullptr))
 	{
+		bHasImpacted = true;
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Destroy();
 	}
 }
@@ -81,6 +99,13 @@ void AWeaponProjectile::HandleBlockingHit(
 	FVector NormalImpulse,
 	const FHitResult& Hit)
 {
+	if (bHasImpacted)
+	{
+		return;
+	}
+
+	bHasImpacted = true;
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	TryApplyDamage(OtherActor, &Hit);
 	Destroy();
 }
@@ -90,37 +115,19 @@ bool AWeaponProjectile::TryApplyDamage(AActor* TargetActor, const FHitResult* Hi
 	if (!IsValid(TargetActor)
 		|| TargetActor == AttackOwner
 		|| !SourceAbilitySystem
-		|| !DamageEffect)
+		|| !DamageEffect
+		|| DamageAmount <= 0.0f)
 	{
 		return false;
 	}
 
-	IAbilitySystemInterface* TargetInterface = Cast<IAbilitySystemInterface>(TargetActor);
-	UAbilitySystemComponent* TargetAbilitySystem = TargetInterface
-		? TargetInterface->GetAbilitySystemComponent()
-		: nullptr;
-	if (!TargetAbilitySystem)
-	{
-		return false;
-	}
-
-	FGameplayEffectContextHandle EffectContext = SourceAbilitySystem->MakeEffectContext();
-	EffectContext.AddInstigator(AttackOwner, AttackOwner);
-	EffectContext.AddSourceObject(DamageSourceObject);
-	if (HitResult)
-	{
-		EffectContext.AddHitResult(*HitResult, true);
-	}
-
-	const FGameplayEffectSpecHandle SpecHandle = SourceAbilitySystem->MakeOutgoingSpec(
+	// [공통 데미지 처리 추가] 근접/히트스캔과 동일한 GAS 피해 전달 함수를 사용한다.
+	return WinterCombat::ApplyDamageEffect(
+		SourceAbilitySystem,
+		AttackOwner,
+		TargetActor,
 		DamageEffect,
-		1.0f,
-		EffectContext);
-	if (!SpecHandle.IsValid())
-	{
-		return false;
-	}
-
-	TargetAbilitySystem->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-	return true;
+		DamageAmount,
+		DamageSourceObject,
+		HitResult);
 }

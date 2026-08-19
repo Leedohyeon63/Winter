@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -26,7 +26,7 @@ enum class EEquipmentSlot : uint8
 	SecondaryWeapon UMETA(DisplayName = "Secondary Weapon")
 };
 
-/** ¾ÆÀÌÅÛÀÇ °øÅë Á¤º¸¿Í Àåºñ ¹× ¹«±â ¼³Á¤À» º¸°üÇÑ´Ù. */
+/** ì•„ì´í…œì˜ ê³µí†µ ì •ë³´ì™€ ì¥ë¹„ ë° ë¬´ê¸° ì„¤ì •ì„ ë³´ê´€í•œë‹¤. */
 UCLASS(BlueprintType)
 class WINTER_API UItemDefinitionDataAsset : public UPrimaryDataAsset
 {
@@ -62,7 +62,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Storage", meta = (EditCondition = "bEquippable", ClampMin = "0.0"))
 	float GrantedMaxWeight = 0.0f;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] ¹«±â°¡ ±ÙÁ¢, Áï¹ß, Åõ»çÃ¼ Áß ¾î¶² ÆÇÁ¤À» »ç¿ëÇÒÁö Native Gameplay Tag·Î ÁöÁ¤ÇÑ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] ë¬´ê¸°ê°€ ê·¼ì ‘, ì¦‰ë°œ, íˆ¬ì‚¬ì²´ ì¤‘ ì–´ë–¤ íŒì •ì„ ì‚¬ìš©í• ì§€ Native Gameplay Tagë¡œ ì§€ì •í•œë‹¤.
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
@@ -70,22 +70,26 @@ public:
 		meta = (Categories = "Weapon.AttackType"))
 	FGameplayTag AttackTypeTag;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] ÀûÁßÇÑ ´ë»ó ASC¿¡ Àû¿ëÇÒ Instant GameplayEffect´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] ì ì¤‘í•œ ëŒ€ìƒ ASCì— ì ìš©í•  Instant GameplayEffectë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	TSubclassOf<UGameplayEffect> AttackDamageEffect;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] °ø°İ ½ÃÀÛ ½Ã Àç»ıÇÒ ¸ùÅ¸ÁÖ´Ù. ºñ¾î ÀÖÀ¸¸é Áï½Ã °ø°İ ÆÇÁ¤À» ½ÇÇàÇÑ´Ù.
+	// [ê³µí†µ ë°ë¯¸ì§€ ì²˜ë¦¬ ì¶”ê°€] Data.Damage SetByCallerë¡œ ì „ë‹¬í•  ë¬´ê¸°ì˜ ê¸°ë³¸ í”¼í•´ëŸ‰ì´ë‹¤.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Attack", meta = (ClampMin = "0.0"))
+	float AttackDamage = 20.0f;
+
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] ê³µê²© ì‹œì‘ ì‹œ ì¬ìƒí•  ëª½íƒ€ì£¼ë‹¤. ë¹„ì–´ ìˆìœ¼ë©´ ì¦‰ì‹œ ê³µê²© íŒì •ì„ ì‹¤í–‰í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Animation")
 	TObjectPtr<UAnimMontage> AttackMontage;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] È°¼ºÈ­ÇÏ¸é ¸ùÅ¸ÁÖÀÇ AnimNotify°¡ ExecutePendingAttackÀ» È£ÃâÇÒ ¶§ ÆÇÁ¤ÇÑ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] í™œì„±í™”í•˜ë©´ ëª½íƒ€ì£¼ì˜ AnimNotifyê°€ ExecutePendingAttackì„ í˜¸ì¶œí•  ë•Œ íŒì •í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Animation")
 	bool bExecuteAttackOnAnimNotify = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Attack", meta = (ClampMin = "0.0"))
 	float AttackRange = 180.0f;
 
-	// [¿şÆù ¸Å´ÏÀú Ãß°¡] ±ÙÁ¢ Sphere SweepÀÇ ¹İÁö¸§ÀÌ´Ù.
+	// [ì›¨í° ë§¤ë‹ˆì € ì¶”ê°€] ê·¼ì ‘ Sphere Sweepì˜ ë°˜ì§€ë¦„ì´ë‹¤.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Attack", meta = (ClampMin = "0.0"))
 	float AttackRadius = 55.0f;
 

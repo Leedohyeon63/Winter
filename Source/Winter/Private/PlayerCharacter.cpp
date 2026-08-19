@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameState/MainGameState.h"
 #include "Subsystem/LevelTravelSubsystem.h"
+#include "WinterGameplayTags.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -142,6 +143,10 @@ void APlayerCharacter::UpdateMentalityWorldState(bool bForceBroadcast)
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (bIsDead)
+	{
+		return;
+	}
 	CheckCrosshairHover();
 }
 
@@ -204,6 +209,11 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void APlayerCharacter::OnSprintInput(bool bIsSprinting)
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	if (bIsSprinting)
 	{
 
@@ -241,6 +251,11 @@ void APlayerCharacter::OnSprintInput(bool bIsSprinting)
 
 void APlayerCharacter::StartStaminaRegen()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	if (AbilitySystemComponent && StaminaRegenEffect && !ActiveStaminaRegenHandle.IsValid())
 	{
 		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
@@ -256,6 +271,11 @@ void APlayerCharacter::StartStaminaRegen()
 
 void APlayerCharacter::TryInteract()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	CheckCrosshairHover();
 
 	if (IsValid(CurrentHoveredComponent) && CurrentHoveredComponent->CanInteract(this))
@@ -269,12 +289,17 @@ void APlayerCharacter::TryInteract()
 
 void APlayerCharacter::RequestInventoryToggle()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	OnInventoryToggleRequested.Broadcast();
 }
 
 void APlayerCharacter::TryWeaponAttack()
 {
-	if (WeaponManagerComponent)
+	if (!bIsDead && WeaponManagerComponent)
 	{
 		WeaponManagerComponent->StartAttack();
 	}
@@ -282,7 +307,7 @@ void APlayerCharacter::TryWeaponAttack()
 
 void APlayerCharacter::SwitchActiveWeapon()
 {
-	if (WeaponManagerComponent)
+	if (!bIsDead && WeaponManagerComponent)
 	{
 		WeaponManagerComponent->SwitchWeapon();
 	}
@@ -342,7 +367,49 @@ void APlayerCharacter::HealthChangedCallback(const FOnAttributeChangeData& Data)
 	if (AttributeSet)
 	{
 		OnHealthChanged.Broadcast(Data.NewValue, AttributeSet->GetMaxHealth());
+
+		if (Data.NewValue <= 0.0f)
+		{
+			Die();
+		}
 	}
+}
+
+void APlayerCharacter::Die()
+{
+	if (bIsDead)
+	{
+		return;
+	}
+
+	// [플레이어 사망 처리 추가] 체력 0 이후 전투·상호작용·스태미나 처리가 계속되지 않도록 한 번만 정리한다.
+	bIsDead = true;
+	if (WeaponManagerComponent)
+	{
+		WeaponManagerComponent->CancelPendingAttack();
+	}
+
+	GetWorldTimerManager().ClearTimer(StaminaRegenTimerHandle);
+	if (AbilitySystemComponent)
+	{
+		if (ActiveStaminaDrainHandle.IsValid())
+		{
+			AbilitySystemComponent->RemoveActiveGameplayEffect(ActiveStaminaDrainHandle);
+			ActiveStaminaDrainHandle.Invalidate();
+		}
+		if (ActiveStaminaRegenHandle.IsValid())
+		{
+			AbilitySystemComponent->RemoveActiveGameplayEffect(ActiveStaminaRegenHandle);
+			ActiveStaminaRegenHandle.Invalidate();
+		}
+		AbilitySystemComponent->AddLooseGameplayTag(WinterGameplayTags::State_Dead);
+	}
+
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	CurrentHoveredComponent = nullptr;
+	OnHoverInteractableChanged.Broadcast(false, FString());
+	OnPlayerDied.Broadcast();
 }
 
 void APlayerCharacter::StaminaChangedCallback(const FOnAttributeChangeData& Data)

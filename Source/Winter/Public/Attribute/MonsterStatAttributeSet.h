@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "AttributeSet.h"
@@ -25,8 +25,13 @@ public:
 	FGameplayAttributeData Health;
 	MONSTER_ATTRIBUTE_ACCESSORS(UMonsterStatAttributeSet, Health)
 
-		UPROPERTY(BlueprintReadOnly, Category = "Monster|Attributes")
+	UPROPERTY(BlueprintReadOnly, Category = "Monster|Attributes")
 	FGameplayAttributeData MaxHealth;
 	MONSTER_ATTRIBUTE_ACCESSORS(UMonsterStatAttributeSet, MaxHealth)
+
+	// [공통 데미지 처리 추가] GameplayEffect의 양수 피해를 받은 뒤 Health에서 차감하는 메타 속성이다.
+	UPROPERTY(BlueprintReadOnly, Category = "Monster|Attributes")
+	FGameplayAttributeData IncomingDamage;
+	MONSTER_ATTRIBUTE_ACCESSORS(UMonsterStatAttributeSet, IncomingDamage)
 };
 
