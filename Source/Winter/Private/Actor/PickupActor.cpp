@@ -11,7 +11,7 @@ APickupActor::APickupActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// [ÇÈ¾÷ ÄÄÆ÷³ÍÆ® ±¸Á¶ ¼öÁ¤] ¸Ş½Ã¸¦ Root·Î »ç¿ëÇÏÁö ¾Ê¾Æ ¸Ş½Ã ½ºÄÉÀÏÀÌ Äİ¸®Àü¿¡ Àü´ŞµÇÁö ¾Ê°Ô ÇÑ´Ù.
+	// [í”½ì—… ì»´í¬ë„ŒíŠ¸ êµ¬ì¡° ìˆ˜ì •] ë©”ì‹œë¥¼ Rootë¡œ ì‚¬ìš©í•˜ì§€ ì•Šì•„ ë©”ì‹œ ìŠ¤ì¼€ì¼ì´ ì½œë¦¬ì „ì— ì „ë‹¬ë˜ì§€ ì•Šê²Œ í•œë‹¤.
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
@@ -20,7 +20,7 @@ APickupActor::APickupActor()
 
 	InteractionCollision = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionCollision"));
 
-	// [ÇÈ¾÷ ÄÄÆ÷³ÍÆ® ±¸Á¶ ¼öÁ¤] Äİ¸®ÀüÀ» ¸Ş½Ã°¡ ¾Æ´Ñ °øÅë SceneRoot¿¡ ºÎÂøÇÑ´Ù.
+	// [í”½ì—… ì»´í¬ë„ŒíŠ¸ êµ¬ì¡° ìˆ˜ì •] ì½œë¦¬ì „ì„ ë©”ì‹œê°€ ì•„ë‹Œ ê³µí†µ SceneRootì— ë¶€ì°©í•œë‹¤.
 	InteractionCollision->SetupAttachment(SceneRoot);
 	InteractionCollision->InitSphereRadius(100.0f);
 
@@ -81,6 +81,6 @@ void APickupActor::RefreshPrompt()
 	}
 
 	InteractableComponent->PromptText = Quantity > 1
-		? FString::Printf(TEXT("%s x%d Áİ±â [F]"), *ItemDefinition->DisplayName.ToString(), Quantity)
-		: FString::Printf(TEXT("%s Áİ±â [F]"), *ItemDefinition->DisplayName.ToString());
+		? FString::Printf(TEXT("%s x%d ì¤ê¸° [F]"), *ItemDefinition->DisplayName.ToString(), Quantity)
+		: FString::Printf(TEXT("%s ì¤ê¸° [F]"), *ItemDefinition->DisplayName.ToString());
 }

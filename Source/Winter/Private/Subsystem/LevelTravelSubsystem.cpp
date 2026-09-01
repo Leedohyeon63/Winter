@@ -19,11 +19,11 @@ bool ULevelTravelSubsystem::TravelToLevel(
 	const FString TargetPackageName = TargetLevel.ToSoftObjectPath().GetLongPackageName();
 	if (!FPackageName::IsValidLongPackageName(TargetPackageName))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[LevelTravel] À¯È¿ÇÏÁö ¾ÊÀº ´ë»ó ·¹º§ °æ·Î: %s"), *TargetPackageName);
+		UE_LOG(LogTemp, Warning, TEXT("[LevelTravel] ìœ íš¨í•˜ì§€ ì•Šì€ ëŒ€ìƒ ë ˆë²¨ ê²½ë¡œ: %s"), *TargetPackageName);
 		return false;
 	}
 
-	// [·¹º§ ÀÌµ¿ Ãß°¡] OpenLevelÀÌ ÇöÀç World¿Í PawnÀ» ÆÄ±«ÇÏ±â Àü¿¡ ¿µ¼Ó »óÅÂ¸¦ GameInstance¿¡ º¹»çÇÑ´Ù.
+	// [ë ˆë²¨ ì´ë™ ì¶”ê°€] OpenLevelì´ í˜„ì¬ Worldì™€ Pawnì„ íŒŒê´´í•˜ê¸° ì „ì— ì˜ì† ìƒíƒœë¥¼ GameInstanceì— ë³µì‚¬í•œë‹¤.
 	SavedPlayerState = Player->CaptureTravelState();
 	if (!SavedPlayerState.bIsValid)
 	{
@@ -44,7 +44,7 @@ void ULevelTravelSubsystem::RestorePlayerAfterTravel(APlayerCharacter* Player)
 		return;
 	}
 
-	// [·¹º§ ÀÌµ¿ Ãß°¡] ÀçÁøÀÔÀÌ³ª Áßº¹ º¹¿øÀ» ¸·±â À§ÇØ ¸ÕÀú ´ë±â ÇÃ·¡±×¸¦ ³»¸°´Ù.
+	// [ë ˆë²¨ ì´ë™ ì¶”ê°€] ì¬ì§„ì…ì´ë‚˜ ì¤‘ë³µ ë³µì›ì„ ë§‰ê¸° ìœ„í•´ ë¨¼ì € ëŒ€ê¸° í”Œë˜ê·¸ë¥¼ ë‚´ë¦°ë‹¤.
 	bHasPendingTravel = false;
 
 	Player->RestoreTravelState(SavedPlayerState);
@@ -61,7 +61,7 @@ void ULevelTravelSubsystem::RestorePlayerAfterTravel(APlayerCharacter* Player)
 	}
 	else if (!PendingTargetPortalId.IsNone())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[LevelTravel] ´ë»ó Æ÷Å» ID¸¦ Ã£Áö ¸øÇß½À´Ï´Ù: %s"), *PendingTargetPortalId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[LevelTravel] ëŒ€ìƒ í¬íƒˆ IDë¥¼ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤: %s"), *PendingTargetPortalId.ToString());
 	}
 
 	PendingTargetPortalId = NAME_None;

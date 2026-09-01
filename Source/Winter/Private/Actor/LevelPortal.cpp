@@ -45,7 +45,7 @@ void ALevelPortal::BeginPlay()
 
 FName ALevelPortal::GetPortalId() const
 {
-	// [Æ÷Å» µ¥ÀÌÅÍ ¿¡¼Â º¯°æ] µµÂø Æ÷Å» °Ë»öµµ ¹èÄ¡ ¾×ÅÍ°¡ ¾Æ´Ñ Á¤ÀÇ ¿¡¼ÂÀÇ ID¸¦ ±âÁØÀ¸·Î ÇÑ´Ù.
+	// [í¬íƒˆ ë°ì´í„° ì—ì…‹ ë³€ê²½] ë„ì°© í¬íƒˆ ê²€ìƒ‰ë„ ë°°ì¹˜ ì•¡í„°ê°€ ì•„ë‹Œ ì •ì˜ ì—ì…‹ì˜ IDë¥¼ ê¸°ì¤€ìœ¼ë¡œ í•œë‹¤.
 	return PortalDefinition ? PortalDefinition->PortalId : NAME_None;
 }
 
@@ -89,6 +89,6 @@ void ALevelPortal::RefreshInteractionState()
 		return;
 	}
 
-	InteractableComponent->PromptText = PortalDefinition ? PortalDefinition->InteractionPrompt : TEXT("Æ÷Å» ¼³Á¤");
+	InteractableComponent->PromptText = PortalDefinition ? PortalDefinition->InteractionPrompt : TEXT("í¬íƒˆ ì„¤ì •");
 	InteractableComponent->SetInteractionEnabled(PortalDefinition && !PortalDefinition->TargetLevel.IsNull());
 }

@@ -9,7 +9,7 @@ class UItemDefinitionDataAsset;
 class UStaticMeshComponent;
 class USphereComponent;
 class USceneComponent;
-/** UInteractableComponent¸¦ ÅëÇØ ¾ÆÀÌÅÛÀ» ÇÃ·¹ÀÌ¾î ÀÎº¥Åä¸®·Î ¿Å±â´Â ¿ùµå ¾×ÅÍ. */
+/** UInteractableComponentë¥¼ í†µí•´ ì•„ì´í…œì„ í”Œë ˆì´ì–´ ì¸ë²¤í† ë¦¬ë¡œ ì˜®ê¸°ëŠ” ì›”ë“œ ì•¡í„°. */
 UCLASS()
 class WINTER_API APickupActor : public AActor
 {

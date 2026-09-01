@@ -26,7 +26,7 @@ void UMonsterStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMo
 		if (DamageAmount > 0.0f)
 		{
 			SetHealth(FMath::Clamp(GetHealth() - DamageAmount, 0.0f, GetMaxHealth()));
-			UE_LOG(LogTemp, Log, TEXT("몬스터 데미지 받음 %f"), DamageAmount)
+			UE_LOG(LogTemp, Log, TEXT("몬스터 데미지 받음 %f"), DamageAmount);
 		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetHealthAttribute())
@@ -34,4 +34,3 @@ void UMonsterStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMo
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
 	}
 }
-

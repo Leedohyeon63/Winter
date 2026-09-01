@@ -9,10 +9,11 @@
 #include "Components/PlayerInventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "GameplayEffect.h"
-#include "Kismet/GameplayStatics.h"
+#include "Subsystem/WeaponProjectilePoolSubsystem.h"
 #include "WinterGameplayTags.h"
 
 UWeaponManagerComponent::UWeaponManagerComponent()
@@ -239,6 +240,9 @@ void UWeaponManagerComponent::RefreshActiveWeapon()
 		CancelPendingAttack();
 	}
 
+	// [투사체 풀링 추가] 투사체 무기가 장착되거나 레벨 이동 후 복원되면 발사 전에 풀을 예열한다.
+	ConfigureProjectilePool(CurrentWeapon);
+
 	if (LastActiveWeapon != CurrentWeapon)
 	{
 		LastActiveWeapon = CurrentWeapon;
@@ -426,13 +430,21 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 	}
 
 	const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
-	// [투사체 안정성 보완] 충돌과 이동이 시작되기 전에 공격 정보를 모두 전달하기 위해 지연 생성한다.
-	AWeaponProjectile* Projectile = World->SpawnActorDeferred<AWeaponProjectile>(
+
+	// [투사체 풀링 추가] SpawnActor/Destroy 대신 클래스별 풀에서 비활성 투사체를 가져온다.
+	UWeaponProjectilePoolSubsystem* ProjectilePool =
+		World->GetSubsystem<UWeaponProjectilePoolSubsystem>();
+	if (!ProjectilePool)
+	{
+		return false;
+	}
+
+	ConfigureProjectilePool(WeaponDefinition);
+	AWeaponProjectile* Projectile = ProjectilePool->AcquireProjectile(
 		WeaponDefinition->ProjectileClass,
 		SpawnTransform,
 		CharacterOwner,
-		CharacterOwner,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		CharacterOwner);
 
 	if (!Projectile)
 	{
@@ -448,8 +460,31 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 		WeaponDefinition->AttackDamage,
 		WeaponDefinition->ProjectileSpeed,
 		WeaponDefinition->ProjectileLifeSeconds);
-	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 	return true;
+}
+
+void UWeaponManagerComponent::ConfigureProjectilePool(
+	UItemDefinitionDataAsset* WeaponDefinition)
+{
+	UWorld* World = GetWorld();
+	if (!World
+		|| !WeaponDefinition
+		|| !WeaponDefinition->ProjectileClass
+		|| !WeaponDefinition->AttackTypeTag.MatchesTagExact(
+			WinterGameplayTags::Weapon_AttackType_Projectile))
+	{
+		return;
+	}
+
+	if (UWeaponProjectilePoolSubsystem* ProjectilePool =
+		World->GetSubsystem<UWeaponProjectilePoolSubsystem>())
+	{
+		// [투사체 풀링 추가] 무기 매니저의 에디터 설정을 실제 클래스별 풀에 반영한다.
+		ProjectilePool->ConfigurePool(
+			WeaponDefinition->ProjectileClass,
+			FMath::Max(0, ProjectilePoolPrewarmCount),
+			FMath::Max(1, ProjectilePoolMaxRetainedSize));
+	}
 }
 
 bool UWeaponManagerComponent::ApplyDamageEffect(

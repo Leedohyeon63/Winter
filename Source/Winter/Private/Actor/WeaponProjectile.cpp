@@ -4,6 +4,7 @@
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameplayEffect.h"
+#include "Subsystem/WeaponProjectilePoolSubsystem.h"
 
 AWeaponProjectile::AWeaponProjectile()
 {
@@ -31,6 +32,46 @@ AWeaponProjectile::AWeaponProjectile()
 	ProjectileMovement->bAutoActivate = false;
 }
 
+void AWeaponProjectile::AssignToPool(UWeaponProjectilePoolSubsystem* InOwningPool)
+{
+	OwningPool = InOwningPool;
+	ResetForPool(false);
+}
+
+void AWeaponProjectile::ActivateFromPool(
+	const FTransform& SpawnTransform,
+	AActor* NewOwner,
+	APawn* NewInstigator)
+{
+	// [투사체 풀링 추가] 이전 사용의 수명 타이머와 충돌 상태를 제거하고 새 발사 위치로 순간 이동한다.
+	SetLifeSpan(0.0f);
+	bIsActiveProjectile = true;
+	bHasImpacted = false;
+	SetOwner(NewOwner);
+	SetInstigator(NewInstigator);
+	SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorHiddenInGame(false);
+	SetActorEnableCollision(false);
+	SetActorTickEnabled(true);
+
+	if (CollisionComponent)
+	{
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->StopMovementImmediately();
+		ProjectileMovement->Deactivate();
+		ProjectileMovement->SetComponentTickEnabled(false);
+	}
+}
+
+void AWeaponProjectile::DeactivateToPool()
+{
+	ResetForPool(true);
+}
+
 void AWeaponProjectile::InitializeProjectile(
 	AActor* InAttackOwner,
 	UAbilitySystemComponent* InSourceAbilitySystem,
@@ -40,6 +81,14 @@ void AWeaponProjectile::InitializeProjectile(
 	float InSpeed,
 	float InLifeSeconds)
 {
+	// [투사체 풀링 추가] 풀을 거치지 않고 직접 생성된 기존 호출도 정상 활성화되게 한다.
+	if (!bIsActiveProjectile)
+	{
+		bIsActiveProjectile = true;
+		SetActorHiddenInGame(false);
+		SetActorTickEnabled(true);
+	}
+
 	AttackOwner = InAttackOwner;
 	SourceAbilitySystem = InSourceAbilitySystem;
 	DamageEffect = InDamageEffect;
@@ -56,6 +105,9 @@ void AWeaponProjectile::InitializeProjectile(
 	if (ProjectileMovement)
 	{
 		const float ResolvedSpeed = FMath::Max(0.0f, InSpeed);
+		// [투사체 풀링 추가] 이전 충돌에서 StopSimulating이 UpdatedComponent를 비웠을 수 있으므로 다시 연결한다.
+		ProjectileMovement->SetUpdatedComponent(CollisionComponent);
+		ProjectileMovement->SetComponentTickEnabled(true);
 		ProjectileMovement->InitialSpeed = ResolvedSpeed;
 		ProjectileMovement->MaxSpeed = ResolvedSpeed;
 		ProjectileMovement->Velocity = GetActorForwardVector() * ResolvedSpeed;
@@ -65,10 +117,18 @@ void AWeaponProjectile::InitializeProjectile(
 	if (CollisionComponent)
 	{
 		// [투사체 안정성 보완] 출처와 피해 값이 준비된 뒤에만 충돌 판정을 시작한다.
+		SetActorEnableCollision(true);
 		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 
 	SetLifeSpan(FMath::Max(0.1f, InLifeSeconds));
+	OnActivatedFromPool();
+}
+
+void AWeaponProjectile::LifeSpanExpired()
+{
+	// [투사체 풀링 추가] 시간이 끝나도 액터를 Destroy하지 않고 재사용 대기열로 돌려보낸다.
+	ReturnToPool();
 }
 
 void AWeaponProjectile::HandleOverlap(
@@ -79,7 +139,7 @@ void AWeaponProjectile::HandleOverlap(
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
-	if (bHasImpacted)
+	if (!bIsActiveProjectile || bHasImpacted)
 	{
 		return;
 	}
@@ -88,7 +148,7 @@ void AWeaponProjectile::HandleOverlap(
 	{
 		bHasImpacted = true;
 		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Destroy();
+		ReturnToPool();
 	}
 }
 
@@ -99,7 +159,7 @@ void AWeaponProjectile::HandleBlockingHit(
 	FVector NormalImpulse,
 	const FHitResult& Hit)
 {
-	if (bHasImpacted)
+	if (!bIsActiveProjectile || bHasImpacted)
 	{
 		return;
 	}
@@ -107,7 +167,7 @@ void AWeaponProjectile::HandleBlockingHit(
 	bHasImpacted = true;
 	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	TryApplyDamage(OtherActor, &Hit);
-	Destroy();
+	ReturnToPool();
 }
 
 bool AWeaponProjectile::TryApplyDamage(AActor* TargetActor, const FHitResult* HitResult)
@@ -130,4 +190,69 @@ bool AWeaponProjectile::TryApplyDamage(AActor* TargetActor, const FHitResult* Hi
 		DamageAmount,
 		DamageSourceObject,
 		HitResult);
+}
+
+void AWeaponProjectile::ReturnToPool()
+{
+	if (!bIsActiveProjectile)
+	{
+		return;
+	}
+
+	bHasImpacted = true;
+	if (CollisionComponent)
+	{
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (IsValid(OwningPool))
+	{
+		OwningPool->ReleaseProjectile(this);
+		return;
+	}
+
+	// [투사체 풀링 추가] 풀 밖에서 직접 생성된 투사체는 이전 동작과 동일하게 제거한다.
+	Destroy();
+}
+
+void AWeaponProjectile::ResetForPool(const bool bNotifyBlueprint)
+{
+	SetLifeSpan(0.0f);
+
+	if (bNotifyBlueprint)
+	{
+		OnDeactivatedToPool();
+	}
+
+	if (CollisionComponent)
+	{
+		// [투사체 풀링 추가] 이전 공격자 Ignore 설정을 해제해 다음 소유자에게 누적되지 않게 한다.
+		if (AttackOwner)
+		{
+			CollisionComponent->IgnoreActorWhenMoving(AttackOwner, false);
+		}
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->StopMovementImmediately();
+		ProjectileMovement->Velocity = FVector::ZeroVector;
+		ProjectileMovement->Deactivate();
+		ProjectileMovement->SetComponentTickEnabled(false);
+	}
+
+	AttackOwner = nullptr;
+	SourceAbilitySystem = nullptr;
+	DamageEffect = nullptr;
+	DamageSourceObject = nullptr;
+	DamageAmount = 0.0f;
+	bHasImpacted = true;
+	bIsActiveProjectile = false;
+
+	SetOwner(nullptr);
+	SetInstigator(nullptr);
+	SetActorEnableCollision(false);
+	SetActorHiddenInGame(true);
+	SetActorTickEnabled(false);
 }

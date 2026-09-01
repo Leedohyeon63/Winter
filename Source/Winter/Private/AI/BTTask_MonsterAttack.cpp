@@ -10,7 +10,7 @@ UBTTask_MonsterAttack::UBTTask_MonsterAttack()
 {
 	NodeName = TEXT("Monster Attack");
 
-	// [ºôµå ¿À·ù ¼öÁ¤] protected BlackboardKey¸¦ ÇöÀç ÀÚ½Ä Å¬·¡½º Å¸ÀÔÀ» ÅëÇØ °Ë»çÇÑ´Ù.
+	// [ë¹Œë“œ ì˜¤ë¥˜ ìˆ˜ì •] protected BlackboardKeyë¥¼ í˜„ìž¬ ìžì‹ í´ëž˜ìŠ¤ íƒ€ìž…ì„ í†µí•´ ê²€ì‚¬í•œë‹¤.
 	BlackboardKey.AddObjectFilter(
 		this,
 		GET_MEMBER_NAME_CHECKED(UBTTask_MonsterAttack, BlackboardKey),
@@ -33,7 +33,7 @@ EBTNodeResult::Type UBTTask_MonsterAttack::ExecuteTask(
 		return EBTNodeResult::Failed;
 	}
 
-	// [Behavior Tree º¯°æ] ½ÇÁ¦ Äð´Ù¿î°ú GAS Àû¿ëÀº BaseMonster°¡ º¸ÀåÇÏ¸ç Tree´Â °ø°Ý ½Ãµµ ÈÄ °è¼Ó Æò°¡ÇÑ´Ù.
+	// [Behavior Tree ë³€ê²½] ì‹¤ì œ ì¿¨ë‹¤ìš´ê³¼ GAS ì ìš©ì€ BaseMonsterê°€ ë³´ìž¥í•˜ë©° TreeëŠ” ê³µê²© ì‹œë„ í›„ ê³„ì† í‰ê°€í•œë‹¤.
 	Monster->TryAttack(TargetActor);
 	return EBTNodeResult::Succeeded;
 }

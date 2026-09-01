@@ -6,10 +6,10 @@ class AActor;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 
-/** ÇÃ·¹ÀÌ¾î ¹«±â¿Í ¸ó½ºÅÍ°¡ µ¿ÀÏÇÑ GAS ÇÇÇØ Àü´Ş ±ÔÄ¢À» »ç¿ëÇÏµµ·Ï ¸ğÀº °øÅë ÇÔ¼ö´Ù. */
+/** í”Œë ˆì´ì–´ ë¬´ê¸°ì™€ ëª¬ìŠ¤í„°ê°€ ë™ì¼í•œ GAS í”¼í•´ ì „ë‹¬ ê·œì¹™ì„ ì‚¬ìš©í•˜ë„ë¡ ëª¨ì€ ê³µí†µ í•¨ìˆ˜ë‹¤. */
 namespace WinterCombat
 {
-	// [°øÅë µ¥¹ÌÁö Ã³¸® Ãß°¡] Data.Damage SetByCaller¿Í ÇÇ°İ Á¤º¸¸¦ Æ÷ÇÔÇÑ GameplayEffect¸¦ ´ë»ó ASC¿¡ Àû¿ëÇÑ´Ù.
+	// [ê³µí†µ ë°ë¯¸ì§€ ì²˜ë¦¬ ì¶”ê°€] Data.Damage SetByCallerì™€ í”¼ê²© ì •ë³´ë¥¼ í¬í•¨í•œ GameplayEffectë¥¼ ëŒ€ìƒ ASCì— ì ìš©í•œë‹¤.
 	WINTER_API bool ApplyDamageEffect(
 		UAbilitySystemComponent* SourceAbilitySystem,
 		AActor* SourceActor,

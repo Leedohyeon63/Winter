@@ -218,7 +218,7 @@ TMap<EEquipmentSlot, UItemDefinitionDataAsset*> UPlayerInventoryComponent::GetEq
 
 FInventoryTravelState UPlayerInventoryComponent::CaptureTravelState() const
 {
-	// [·¹º§ ÀÌµ¿ Ãß°¡] ¾ÆÀÌÅÛ ½ºÅÃ°ú ÀåÂø »óÅÂ¸¦ ÇÑ ½ÃÁ¡ÀÇ °ªÀ¸·Î º¹»çÇÑ´Ù.
+	// [ë ˆë²¨ ì´ë™ ì¶”ê°€] ì•„ì´í…œ ìŠ¤íƒê³¼ ì¥ì°© ìƒíƒœë¥¼ í•œ ì‹œì ì˜ ê°’ìœ¼ë¡œ ë³µì‚¬í•œë‹¤.
 	FInventoryTravelState State;
 	State.Items = Items;
 	State.EquippedItems = EquippedItems;
@@ -227,7 +227,7 @@ FInventoryTravelState UPlayerInventoryComponent::CaptureTravelState() const
 
 void UPlayerInventoryComponent::RestoreTravelState(const FInventoryTravelState& InState)
 {
-	// [·¹º§ ÀÌµ¿ Ãß°¡] °°Àº ÇÃ·¹ÀÌ ¼¼¼Ç¿¡¼­ Ä¸Ã³ÇÑ À¯È¿ÇÑ »óÅÂ¸¦ ±×´ë·Î º¹¿øÇÑ´Ù.
+	// [ë ˆë²¨ ì´ë™ ì¶”ê°€] ê°™ì€ í”Œë ˆì´ ì„¸ì…˜ì—ì„œ ìº¡ì²˜í•œ ìœ íš¨í•œ ìƒíƒœë¥¼ ê·¸ëŒ€ë¡œ ë³µì›í•œë‹¤.
 	Items = InState.Items;
 	EquippedItems = InState.EquippedItems;
 	BroadcastStateChanged();

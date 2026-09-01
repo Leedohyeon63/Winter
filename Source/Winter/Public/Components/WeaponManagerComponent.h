@@ -63,6 +63,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Debug")
 	bool bDrawDebugTraces = false;
 
+	// [투사체 풀링 추가] 투사체 무기를 장착했을 때 해당 클래스에 미리 준비할 개체 수다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Weapon|Projectile Pool",
+		meta = (ClampMin = "0"))
+	int32 ProjectilePoolPrewarmCount = 8;
+
+	// [투사체 풀링 추가] 동시 발사로 확장된 뒤 풀에 계속 보관할 클래스별 최대 개체 수다.
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Weapon|Projectile Pool",
+		meta = (ClampMin = "1"))
+	int32 ProjectilePoolMaxRetainedSize = 32;
+
 private:
 	UFUNCTION()
 	void HandleInventoryChanged();
@@ -73,6 +89,7 @@ private:
 	bool ExecuteMeleeAttack(UItemDefinitionDataAsset* WeaponDefinition);
 	bool ExecuteHitscanAttack(UItemDefinitionDataAsset* WeaponDefinition);
 	bool ExecuteProjectileAttack(UItemDefinitionDataAsset* WeaponDefinition);
+	void ConfigureProjectilePool(UItemDefinitionDataAsset* WeaponDefinition);
 	bool ApplyDamageEffect(
 		AActor* TargetActor,
 		UItemDefinitionDataAsset* WeaponDefinition,

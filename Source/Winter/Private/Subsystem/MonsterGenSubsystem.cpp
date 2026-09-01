@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Monster/BaseMonster.h"
 #include "NavigationSystem.h"
+#include "Subsystem/MonsterPoolSubsystem.h"
 #include "TimerManager.h"
 
 void UMonsterGenSubsystem::OnWorldBeginPlay(UWorld& InWorld)
@@ -22,7 +23,7 @@ void UMonsterGenSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	if (CachedMainGameState)
 	{
-		// [¸àÅ»¸®Æ¼ ¿ùµå »óÅÂ Ãß°¡] Áß¾Ó °èÃşÀÇ »óÅÂ º¯°æÀ» ±¸µ¶ÇØ µ¶¸³ÀûÀ¸·Î ½ºÆù ±ÔÄ¢À» °»½ÅÇÑ´Ù.
+		// [ë©˜íƒˆë¦¬í‹° ì›”ë“œ ìƒíƒœ ì¶”ê°€] ì¤‘ì•™ ê³„ì¸µì˜ ìƒíƒœ ë³€ê²½ì„ êµ¬ë…í•´ ë…ë¦½ì ìœ¼ë¡œ ìŠ¤í° ê·œì¹™ì„ ê°±ì‹ í•œë‹¤.
 		CachedMainGameState->OnMentalityWorldStateChanged.AddDynamic(
 			this,
 			&UMonsterGenSubsystem::HandleMentalityWorldStateChanged);
@@ -31,7 +32,7 @@ void UMonsterGenSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	}
 	else
 	{
-		// [È£È¯ À¯Áö] Ä¿½ºÅÒ MainGameState°¡ ¾Æ´Ñ ·¹º§¿¡¼­µµ ±âÁ¸ ¼³Á¤À¸·Î µ¿ÀÛÇÑ´Ù.
+		// [í˜¸í™˜ ìœ ì§€] ì»¤ìŠ¤í…€ MainGameStateê°€ ì•„ë‹Œ ë ˆë²¨ì—ì„œë„ ê¸°ì¡´ ì„¤ì •ìœ¼ë¡œ ë™ì‘í•œë‹¤.
 		ApplySpawnProfile(EMentalityWorldState::Stable);
 	}
 
@@ -105,12 +106,12 @@ void UMonsterGenSubsystem::ApplySpawnProfile(EMentalityWorldState NewState)
 
 	if (Profile)
 	{
-		// [¸àÅ»¸®Æ¼ ¿ùµå »óÅÂ Ãß°¡] ¼±ÅÃµÈ ´Ü°èÀÇ ¸ó½ºÅÍ¿Í ¼ö·®/°Å¸®/ÁÖ±â¸¦ ·±Å¸ÀÓ ¼³Á¤À¸·Î Àû¿ëÇÑ´Ù.
+		// [ë©˜íƒˆë¦¬í‹° ì›”ë“œ ìƒíƒœ ì¶”ê°€] ì„ íƒëœ ë‹¨ê³„ì˜ ëª¬ìŠ¤í„°ì™€ ìˆ˜ëŸ‰/ê±°ë¦¬/ì£¼ê¸°ë¥¼ ëŸ°íƒ€ì„ ì„¤ì •ìœ¼ë¡œ ì ìš©í•œë‹¤.
 		for (const TSubclassOf<ABaseMonster>& MonsterClass : Profile->MonsterSpawn.MonsterClasses)
 		{
 			if (MonsterClass)
 			{
-				ActiveMonsterClasses.Add(TSubclassOf<AActor>(MonsterClass.Get()));
+				ActiveMonsterClasses.Add(MonsterClass);
 			}
 		}
 
@@ -120,15 +121,58 @@ void UMonsterGenSubsystem::ApplySpawnProfile(EMentalityWorldState NewState)
 			ActiveSpawnRadius,
 			Profile->MonsterSpawn.DespawnRadius);
 		ActiveCheckInterval = FMath::Max(0.1f, Profile->MonsterSpawn.CheckInterval);
+		ConfigureActiveMonsterPools();
 		return;
 	}
 
-	// [È£È¯ À¯Áö] ¼³Á¤ ¿¡¼Â ¶Ç´Â ÇöÀç »óÅÂ ÇÁ·ÎÇÊÀÌ ¾øÀ¸¸é ±âÁ¸ °ªÀ» º¹»çÇÑ´Ù.
-	ActiveMonsterClasses = MonsterClassesToSpawn;
+	// [í˜¸í™˜ ìœ ì§€] ì„¤ì • ì—ì…‹ ë˜ëŠ” í˜„ì¬ ìƒíƒœ í”„ë¡œí•„ì´ ì—†ìœ¼ë©´ ê¸°ì¡´ ê°’ì„ ë³µì‚¬í•œë‹¤.
+	for (const TSubclassOf<AActor>& LegacyMonsterClass : MonsterClassesToSpawn)
+	{
+		if (LegacyMonsterClass
+			&& LegacyMonsterClass->IsChildOf(ABaseMonster::StaticClass()))
+		{
+			// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] ê¸°ì¡´ ë°°ì—´ì€ ìœ ì§€í•˜ë˜ ì‹¤ì œ í’€ì—ëŠ” BaseMonster ìì‹ë§Œ ë“±ë¡í•œë‹¤.
+			ActiveMonsterClasses.Add(
+				TSubclassOf<ABaseMonster>(LegacyMonsterClass.Get()));
+		}
+		else if (LegacyMonsterClass)
+		{
+			UE_LOG(
+				LogMonsterPool,
+				Warning,
+				TEXT("Skipped non-BaseMonster legacy class: %s"),
+				*GetNameSafe(LegacyMonsterClass.Get()));
+		}
+	}
 	ActiveMaxMonsters = FMath::Max(0, MaxMonsters);
 	ActiveSpawnRadius = FMath::Max(0.0f, SpawnRadius);
 	ActiveDespawnRadius = FMath::Max(ActiveSpawnRadius, DespawnRadius);
 	ActiveCheckInterval = FMath::Max(0.1f, CheckInterval);
+	ConfigureActiveMonsterPools();
+}
+
+void UMonsterGenSubsystem::ConfigureActiveMonsterPools()
+{
+	UWorld* World = GetWorld();
+	UMonsterPoolSubsystem* MonsterPool = World
+		? World->GetSubsystem<UMonsterPoolSubsystem>()
+		: nullptr;
+	if (!MonsterPool)
+	{
+		return;
+	}
+
+	for (const TSubclassOf<ABaseMonster>& MonsterClass : ActiveMonsterClasses)
+	{
+		if (MonsterClass)
+		{
+			// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] ë©˜íƒˆë¦¬í‹° í”„ë¡œí•„ì´ ë°”ë€Œë©´ ìƒˆ í”„ë¡œí•„ì˜ í´ë˜ìŠ¤ í’€ë„ ì¦‰ì‹œ ì˜ˆì—´í•œë‹¤.
+			MonsterPool->ConfigurePool(
+				MonsterClass,
+				FMath::Max(0, MonsterPoolPrewarmCountPerClass),
+				FMath::Max(1, MonsterPoolMaxRetainedSizePerClass));
+		}
+	}
 }
 
 void UMonsterGenSubsystem::RestartManageTimer()
@@ -163,13 +207,19 @@ void UMonsterGenSubsystem::ManageMonsters()
 	}
 
 	const FVector PlayerLocation = Player->GetActorLocation();
+	UMonsterPoolSubsystem* MonsterPool = World->GetSubsystem<UMonsterPoolSubsystem>();
+	if (!MonsterPool)
+	{
+		return;
+	}
 
 	for (int32 Index = ActiveMonsters.Num() - 1; Index >= 0; --Index)
 	{
-		AActor* Monster = ActiveMonsters[Index];
+		ABaseMonster* Monster = ActiveMonsters[Index];
 
-		if (!IsValid(Monster))
+		if (!IsValid(Monster) || !Monster->IsActiveMonster())
 		{
+			// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] ì‚¬ë§ ì§€ì—° í›„ ì´ë¯¸ í’€ì— ë“¤ì–´ê°„ ëª¬ìŠ¤í„°ëŠ” í™œì„± ëª©ë¡ì—ì„œ ì œì™¸í•œë‹¤.
 			ActiveMonsters.RemoveAt(Index);
 			continue;
 		}
@@ -179,7 +229,8 @@ void UMonsterGenSubsystem::ManageMonsters()
 
 		if (DistanceToPlayer > ActiveDespawnRadius)
 		{
-			Monster->Destroy();
+			// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] í”Œë ˆì´ì–´ì—ê²Œì„œ ë©€ì–´ì§„ ëª¬ìŠ¤í„°ëŠ” ì œê±°í•˜ì§€ ì•Šê³  í’€ë¡œ ë°˜í™˜í•œë‹¤.
+			MonsterPool->ReleaseMonster(Monster);
 			ActiveMonsters.RemoveAt(Index);
 		}
 	}
@@ -202,17 +253,17 @@ void UMonsterGenSubsystem::ManageMonsters()
 	}
 
 	const int32 RandomIndex = FMath::RandRange(0, ActiveMonsterClasses.Num() - 1);
-	const TSubclassOf<AActor> SelectedMonsterClass = ActiveMonsterClasses[RandomIndex];
+	const TSubclassOf<ABaseMonster> SelectedMonsterClass = ActiveMonsterClasses[RandomIndex];
 
 	if (!SelectedMonsterClass)
 	{
 		return;
 	}
 
-	AActor* SpawnedMonster = World->SpawnActor<AActor>(
+	// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] SpawnActor ëŒ€ì‹  í´ë˜ìŠ¤ë³„ í’€ì—ì„œ ëª¬ìŠ¤í„°ë¥¼ ê°€ì ¸ì™€ ì²´ë ¥ê³¼ AIë¥¼ ì´ˆê¸°í™”í•œë‹¤.
+	ABaseMonster* SpawnedMonster = MonsterPool->AcquireMonster(
 		SelectedMonsterClass,
-		RandomNavLocation.Location,
-		FRotator::ZeroRotator);
+		FTransform(FRotator::ZeroRotator, RandomNavLocation.Location));
 
 	if (SpawnedMonster)
 	{

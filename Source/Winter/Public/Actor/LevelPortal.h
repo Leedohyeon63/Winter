@@ -10,7 +10,7 @@ class UPortalDefinitionDataAsset;
 class USphereComponent;
 class UStaticMeshComponent;
 
-/** FÅ° »óÈ£ÀÛ¿ëÀ¸·Î ÁöÁ¤ ·¹º§ÀÇ »ó´ë Æ÷Å» À§Ä¡·Î ÀÌµ¿½ÃÅ°´Â Æ÷Å». */
+/** Fí‚¤ ìƒí˜¸ì‘ìš©ìœ¼ë¡œ ì§€ì • ë ˆë²¨ì˜ ìƒëŒ€ í¬íƒˆ ìœ„ì¹˜ë¡œ ì´ë™ì‹œí‚¤ëŠ” í¬íƒˆ. */
 UCLASS()
 class WINTER_API ALevelPortal : public AActor
 {

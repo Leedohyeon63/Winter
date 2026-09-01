@@ -11,8 +11,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCarryWeightChangedSignature, flo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryCapacityChangedSignature, int32, UsedSlots, int32, MaxSlots);
 
 /**
- * ½Ì±ÛÇÃ·¹ÀÌ¿ë ÇÃ·¹ÀÌ¾î ÀÎº¥Åä¸®.
- * ¹è¿­ÀÇ ÇÑ ¿ø¼Ò°¡ UIÀÇ ÇÑ ½½·ÔÀÌ¸ç °°Àº ¾ÆÀÌÅÛÀº MaxStackSize¸¸Å­ ½×ÀÎ´Ù.
+ * ì‹±ê¸€í”Œë ˆì´ìš© í”Œë ˆì´ì–´ ì¸ë²¤í† ë¦¬.
+ * ë°°ì—´ì˜ í•œ ì›ì†Œê°€ UIì˜ í•œ ìŠ¬ë¡¯ì´ë©° ê°™ì€ ì•„ì´í…œì€ MaxStackSizeë§Œí¼ ìŒ“ì¸ë‹¤.
  */
 UCLASS(ClassGroup = (Inventory), meta = (BlueprintSpawnableComponent))
 class WINTER_API UPlayerInventoryComponent : public UActorComponent
@@ -31,11 +31,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory|Events")
 	FOnInventoryCapacityChangedSignature OnCapacityChanged;
 
-	/** °¡´ÉÇÑ ¼ö·®¸¸ Ãß°¡ÇÏ°í ½ÇÁ¦ Ãß°¡µÈ °³¼ö¸¦ ¹İÈ¯ÇÑ´Ù. */
+	/** ê°€ëŠ¥í•œ ìˆ˜ëŸ‰ë§Œ ì¶”ê°€í•˜ê³  ì‹¤ì œ ì¶”ê°€ëœ ê°œìˆ˜ë¥¼ ë°˜í™˜í•œë‹¤. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	int32 AddItem(UItemDefinitionDataAsset* Item, int32 Quantity = 1);
 
-	/** ¿äÃ» ¼ö·®À» ÀüºÎ Á¦°ÅÇÒ ¼ö ÀÖÀ» ¶§¸¸ ¼º°øÇÑ´Ù. */
+	/** ìš”ì²­ ìˆ˜ëŸ‰ì„ ì „ë¶€ ì œê±°í•  ìˆ˜ ìˆì„ ë•Œë§Œ ì„±ê³µí•œë‹¤. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool RemoveItem(UItemDefinitionDataAsset* Item, int32 Quantity = 1);
 
@@ -69,11 +69,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory|Weight")
 	float GetMaxCarryWeight() const;
 
-	/** ÀÎº¥Åä¸®¿¡ ÀÖ´Â ¾ÆÀÌÅÛ ÇÑ °³¸¦ ÁöÁ¤µÈ Àåºñ ½½·Ô¿¡ ÀåÂøÇÑ´Ù. */
+	/** ì¸ë²¤í† ë¦¬ì— ìˆëŠ” ì•„ì´í…œ í•œ ê°œë¥¼ ì§€ì •ëœ ì¥ë¹„ ìŠ¬ë¡¯ì— ì¥ì°©í•œë‹¤. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Equipment")
 	bool EquipItem(UItemDefinitionDataAsset* Item);
 
-	/** Àåºñ¸¦ ÀÎº¥Åä¸®·Î µÇµ¹¸° µÚ¿¡µµ °ø°£/¹«°Ô Á¦ÇÑÀ» ¸¸Á·ÇÒ ¶§¸¸ ÇØÁ¦ÇÑ´Ù. */
+	/** ì¥ë¹„ë¥¼ ì¸ë²¤í† ë¦¬ë¡œ ë˜ëŒë¦° ë’¤ì—ë„ ê³µê°„/ë¬´ê²Œ ì œí•œì„ ë§Œì¡±í•  ë•Œë§Œ í•´ì œí•œë‹¤. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Equipment")
 	bool UnequipItem(EEquipmentSlot Slot);
 
@@ -83,7 +83,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory|Equipment")
 	TMap<EEquipmentSlot, UItemDefinitionDataAsset*> GetEquippedItems() const;
 
-	// [·¹º§ ÀÌµ¿ Ãß°¡] GameInstance ¼­ºê½Ã½ºÅÛÀÌ ·¹º§ ÀÌµ¿ ÀüÈÄ¿¡ °°Àº ÀÎº¥Åä¸®¸¦ º¹¿øÇÒ ¶§ »ç¿ëÇÑ´Ù.
+	// [ë ˆë²¨ ì´ë™ ì¶”ê°€] GameInstance ì„œë¸Œì‹œìŠ¤í…œì´ ë ˆë²¨ ì´ë™ ì „í›„ì— ê°™ì€ ì¸ë²¤í† ë¦¬ë¥¼ ë³µì›í•  ë•Œ ì‚¬ìš©í•œë‹¤.
 	FInventoryTravelState CaptureTravelState() const;
 	void RestoreTravelState(const FInventoryTravelState& InState);
 

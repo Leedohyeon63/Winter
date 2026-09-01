@@ -50,7 +50,7 @@ bool WinterCombat::ApplyDamageEffect(
 		return false;
 	}
 
-	// [°øÅë µ¥¹ÌÁö Ã³¸® Ãß°¡] GE´Â ÀÌ ¾ç¼ö °ªÀ» ´ë»ó AttributeSetÀÇ IncomingDamage¿¡ ´õÇÏµµ·Ï ¼³Á¤ÇÑ´Ù.
+	// [ê³µí†µ ë°ë¯¸ì§€ ì²˜ë¦¬ ì¶”ê°€] GEëŠ” ì´ ì–‘ìˆ˜ ê°’ì„ ëŒ€ìƒ AttributeSetì˜ IncomingDamageì— ë”í•˜ë„ë¡ ì„¤ì •í•œë‹¤.
 	SpecHandle.Data->SetSetByCallerMagnitude(
 		WinterGameplayTags::Data_Damage,
 		FMath::Max(0.0f, DamageAmount));

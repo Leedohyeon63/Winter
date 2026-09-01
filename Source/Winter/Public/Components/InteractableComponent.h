@@ -23,11 +23,11 @@ protected:
 
 public:
 
-	// ºí·çÇÁ¸°Æ®¿¡¼­ ÀÌº¥Æ®¸¦ ¹ÙÀÎµùÇÒ ¼ö ÀÖµµ·Ï ³ëÃâ
+	// ë¸”ë£¨í”„ë¦°íŠ¸ì—ì„œ ì´ë²¤íŠ¸ë¥¼ ë°”ì¸ë”©í•  ìˆ˜ ìˆë„ë¡ ë…¸ì¶œ
 	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FOnInteractSignature OnInteract;
 
-	// ¿ÜºÎ(ÇÃ·¹ÀÌ¾î)¿¡¼­ È£ÃâÇÒ »óÈ£ÀÛ¿ë ÇÔ¼ö
+	// ì™¸ë¶€(í”Œë ˆì´ì–´)ì—ì„œ í˜¸ì¶œí•  ìƒí˜¸ì‘ìš© í•¨ìˆ˜
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	bool Interact(AActor* Interactor);
 
@@ -43,7 +43,7 @@ public:
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-	FString PromptText = TEXT("»óÈ£ÀÛ¿ë [F]");
+	FString PromptText = TEXT("ìƒí˜¸ì‘ìš© [F]");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	bool bInteractionEnabled = true;

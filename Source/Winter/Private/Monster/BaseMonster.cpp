@@ -12,6 +12,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
+#include "Subsystem/MonsterPoolSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WinterGameplayTags.h"
 
@@ -55,6 +57,80 @@ UAbilitySystemComponent* ABaseMonster::GetAbilitySystemComponent() const
 	return AbilitySystemComponent;
 }
 
+void ABaseMonster::AssignToPool(UMonsterPoolSubsystem* InOwningPool)
+{
+	// [몬스터 풀링 추가] Construction Script가 끝나기 전에는 풀 소유권과 활성 플래그만 주입한다.
+	// 실제 기본값은 BeginPlay에서 캡처하므로 Blueprint가 바꾼 이동·충돌 설정도 재사용 때 복원된다.
+	OwningPool = InOwningPool;
+	if (InOwningPool)
+	{
+		bIsActiveMonster = false;
+	}
+}
+
+void ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
+{
+	// [몬스터 풀링 추가] 이전 사망 지연 타이머와 전투 상태를 제거한 뒤 새 위치로 재배치한다.
+	SetLifeSpan(0.0f);
+	bIsActiveMonster = true;
+	bIsDead = false;
+	bIsProvoked = false;
+	ResetFleeing();
+	CancelPendingAttack();
+	NextAttackAllowedTime = 0.0f;
+	StopAnimMontage();
+
+	SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorHiddenInGame(false);
+	SetActorEnableCollision(true);
+	SetActorTickEnabled(true);
+	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
+
+	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
+	{
+		MonsterMesh->bPauseAnims = false;
+		MonsterMesh->SetComponentTickEnabled(true);
+	}
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->SetComponentTickEnabled(true);
+		Movement->MaxWalkSpeed = InitialMaxWalkSpeed;
+		Movement->SetMovementMode(MOVE_Walking);
+	}
+
+	ResetAbilityStateForReuse();
+	OnActivatedFromPool();
+
+	// [몬스터 풀링 추가] 풀 대기 중 정지했던 BT를 같은 AIController에서 다시 시작한다.
+	const bool bHadController = GetController() != nullptr;
+	if (!bHadController)
+	{
+		SpawnDefaultController();
+	}
+	if (bHadController)
+	{
+		if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
+		{
+			MonsterController->ActivatePooledMonster();
+		}
+	}
+}
+
+void ABaseMonster::DeactivateToPool(const bool bNotifyBlueprint)
+{
+	ResetForPool(bNotifyBlueprint);
+}
+
+void ABaseMonster::DestroyPermanentlyFromPool()
+{
+	// [몬스터 풀링 추가] 일반 Release와 달리 풀 참조를 끊고 AIController의 Pawn 파괴 경로까지 실행한다.
+	OwningPool = nullptr;
+	ResetForPool(false);
+	DetachFromControllerPendingDestroy();
+	Destroy();
+}
+
 UBehaviorTree* ABaseMonster::GetBehaviorTreeAsset() const
 {
 	UBehaviorTree* SelectedTree = nullptr;
@@ -84,7 +160,7 @@ UBehaviorTree* ABaseMonster::GetBehaviorTreeAsset() const
 
 bool ABaseMonster::CanEngageTarget(AActor* TargetActor) const
 {
-	if (bIsDead || !IsValid(TargetActor))
+	if (!bIsActiveMonster || bIsDead || !IsValid(TargetActor))
 	{
 		return false;
 	}
@@ -118,7 +194,8 @@ bool ABaseMonster::CanEngageTarget(AActor* TargetActor) const
 
 void ABaseMonster::Provoke()
 {
-	if (bIsDead
+	if (!bIsActiveMonster
+		|| bIsDead
 		|| Disposition != EMonsterDisposition::Neutral
 		|| bIsProvoked)
 	{
@@ -141,7 +218,8 @@ void ABaseMonster::ResetProvocation()
 
 bool ABaseMonster::ShouldContinueFleeingFrom(AActor* ThreatActor)
 {
-	if (bIsDead
+	if (!bIsActiveMonster
+		|| bIsDead
 		|| Disposition != EMonsterDisposition::Passive
 		|| !bIsFleeing
 		|| !GetWorld())
@@ -165,7 +243,8 @@ bool ABaseMonster::ShouldContinueFleeingFrom(AActor* ThreatActor)
 
 void ABaseMonster::StartFleeing()
 {
-	if (bIsDead
+	if (!bIsActiveMonster
+		|| bIsDead
 		|| Disposition != EMonsterDisposition::Passive
 		|| !GetWorld())
 	{
@@ -192,6 +271,7 @@ void ABaseMonster::ResetFleeing()
 void ABaseMonster::BeginPlay()
 {
 	Super::BeginPlay();
+	CaptureInitialPoolState();
 
 	if (AbilitySystemComponent)
 	{
@@ -209,9 +289,16 @@ void ABaseMonster::BeginPlay()
 	}
 }
 
+void ABaseMonster::LifeSpanExpired()
+{
+	// [몬스터 풀링 추가] 사망 연출 시간이 끝나면 파괴하지 않고 클래스별 풀로 돌아간다.
+	ReturnToPool();
+}
+
 bool ABaseMonster::TryAttack(AActor* TargetActor)
 {
-	if (bIsDead
+	if (!bIsActiveMonster
+		|| bIsDead
 		|| !IsValid(TargetActor)
 		|| !CanEngageTarget(TargetActor)
 		|| !AbilitySystemComponent
@@ -269,7 +356,8 @@ bool ABaseMonster::ExecutePendingAttack()
 	PendingAttackTarget = nullptr;
 	PendingAttackMontage = nullptr;
 
-	if (bIsDead
+	if (!bIsActiveMonster
+		|| bIsDead
 		|| !IsValid(TargetActor)
 		|| !CanEngageTarget(TargetActor)
 		|| !AbilitySystemComponent
@@ -343,7 +431,7 @@ void ABaseMonster::HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterru
 
 void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
 {
-	if (!AttributeSet)
+	if (!AttributeSet || !bIsActiveMonster)
 	{
 		return;
 	}
@@ -371,7 +459,7 @@ void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
 
 void ABaseMonster::Die()
 {
-	if (bIsDead)
+	if (!bIsActiveMonster || bIsDead)
 	{
 		return;
 	}
@@ -386,22 +474,140 @@ void ABaseMonster::Die()
 		AbilitySystemComponent->AddLooseGameplayTag(WinterGameplayTags::State_Dead);
 	}
 
-	// [몬스터 추가] 사망 직후 이동과 충돌을 중지하고 스포너가 다음 검사에서 정리할 수 있도록 수명으로 파괴한다.
+	// [몬스터 풀링 추가] 사망 직후 AI는 제거하지 않고 정지만 시켜 재활성화 때 같은 Controller를 사용한다.
+	if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
+	{
+		MonsterController->DeactivatePooledMonster();
+	}
+
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	DetachFromControllerPendingDestroy();
 
 	OnMonsterDied.Broadcast();
 	OnDeathStarted();
 
-	// [몬스터 추가] SetLifeSpan(0)은 파괴 예약을 취소하므로 0초 설정은 즉시 Destroy로 처리한다.
+	// [몬스터 풀링 추가] 0초면 즉시 반환하고, 지연값이 있으면 사망 연출 후 LifeSpanExpired에서 반환한다.
 	if (DestroyDelayAfterDeath <= KINDA_SMALL_NUMBER)
 	{
-		Destroy();
+		ReturnToPool();
 	}
 	else
 	{
 		SetLifeSpan(DestroyDelayAfterDeath);
 	}
+}
+
+void ABaseMonster::ReturnToPool()
+{
+	if (!bIsActiveMonster)
+	{
+		return;
+	}
+
+	if (IsValid(OwningPool))
+	{
+		OwningPool->ReleaseMonster(this);
+		return;
+	}
+
+	// [몬스터 풀링 추가] 풀 밖에 직접 배치된 몬스터는 기존처럼 실제로 제거한다.
+	DestroyPermanentlyFromPool();
+}
+
+void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
+{
+	// [몬스터 풀링 추가] BeginPlay 전 생성 경로에서도 Construction Script 결과를 한 번 보존한다.
+	CaptureInitialPoolState();
+
+	SetLifeSpan(0.0f);
+	bIsActiveMonster = false;
+	bIsDead = false;
+	bIsProvoked = false;
+	ResetFleeing();
+	CancelPendingAttack();
+	NextAttackAllowedTime = 0.0f;
+	StopAnimMontage();
+
+	if (bNotifyBlueprint)
+	{
+		OnDeactivatedToPool();
+	}
+
+	if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
+	{
+		MonsterController->DeactivatePooledMonster();
+	}
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+		Movement->SetComponentTickEnabled(false);
+	}
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
+	{
+		MonsterMesh->bPauseAnims = true;
+		MonsterMesh->SetComponentTickEnabled(false);
+	}
+
+	if (HasActorBegunPlay() && AbilitySystemComponent)
+	{
+		// [몬스터 풀링 추가] BeginPlay 이후의 지속 GameplayEffect와 사망 태그가 다음 사용에 남지 않게 한다.
+		AbilitySystemComponent->RemoveActiveEffects(FGameplayEffectQuery());
+		AbilitySystemComponent->RemoveLooseGameplayTag(WinterGameplayTags::State_Dead);
+	}
+
+	SetActorEnableCollision(false);
+	SetActorHiddenInGame(true);
+	SetActorTickEnabled(false);
+}
+
+void ABaseMonster::ResetAbilityStateForReuse()
+{
+	if (!AbilitySystemComponent || !AttributeSet)
+	{
+		return;
+	}
+
+	// [몬스터 풀링 추가] 이전 생애의 지속 효과와 사망 태그를 지우고 체력을 Blueprint 기본 최대값으로 복원한다.
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	AbilitySystemComponent->RemoveActiveEffects(FGameplayEffectQuery());
+	AbilitySystemComponent->RemoveLooseGameplayTag(WinterGameplayTags::State_Dead);
+	AbilitySystemComponent->SetNumericAttributeBase(
+		AttributeSet->GetMaxHealthAttribute(),
+		FMath::Max(1.0f, InitialMaxHealth));
+	AbilitySystemComponent->SetNumericAttributeBase(
+		AttributeSet->GetIncomingDamageAttribute(),
+		0.0f);
+	AbilitySystemComponent->SetNumericAttributeBase(
+		AttributeSet->GetHealthAttribute(),
+		FMath::Max(1.0f, InitialMaxHealth));
+
+	OnMonsterHealthChanged.Broadcast(AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
+}
+
+void ABaseMonster::CaptureInitialPoolState()
+{
+	if (bInitialPoolStateCaptured)
+	{
+		return;
+	}
+
+	// [몬스터 풀링 추가] 최초 한 번만 원본 상태를 저장해 반복 반환 중 값이 덮어써지지 않게 한다.
+	if (AttributeSet)
+	{
+		InitialMaxHealth = FMath::Max(1.0f, AttributeSet->GetMaxHealth());
+	}
+	if (GetCharacterMovement())
+	{
+		InitialMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	}
+	if (GetCapsuleComponent())
+	{
+		InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
+	}
+	bInitialPoolStateCaptured = true;
 }

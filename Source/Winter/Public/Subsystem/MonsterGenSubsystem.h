@@ -6,12 +6,13 @@
 #include "MonsterGenSubsystem.generated.h"
 
 class AActor;
+class ABaseMonster;
 class AMainGameState;
 class UWorld;
 
 /**
- * Çã¿ëµÈ ·¹º§¿¡¼­ ÇÃ·¹ÀÌ¾î ÁÖº¯ ¸ó½ºÅÍ¸¦ °ü¸®ÇÑ´Ù.
- * MainGameStateÀÇ ¸àÅ»¸®Æ¼ ¿ùµå »óÅÂ¸¦ ±¸µ¶ÇØ »óÅÂº° ½ºÆù ±ÔÄ¢À» ·±Å¸ÀÓ¿¡ ±³Ã¼ÇÑ´Ù.
+ * í—ˆìš©ëœ ë ˆë²¨ì—ì„œ í”Œë ˆì´ì–´ ì£¼ë³€ ëª¬ìŠ¤í„°ë¥¼ ê´€ë¦¬í•œë‹¤.
+ * MainGameStateì˜ ë©˜íƒˆë¦¬í‹° ì›”ë“œ ìƒíƒœë¥¼ êµ¬ë…í•´ ìƒíƒœë³„ ìŠ¤í° ê·œì¹™ì„ ëŸ°íƒ€ì„ì— êµì²´í•œë‹¤.
  */
 UCLASS(Blueprintable)
 class WINTER_API UMonsterGenSubsystem : public UWorldSubsystem
@@ -26,19 +27,20 @@ private:
 	UFUNCTION()
 	void ManageMonsters();
 
-	// [¸àÅ»¸®Æ¼ ¿ùµå »óÅÂ Ãß°¡] Áß¾Ó »óÅÂ º¯°æ ÀÌº¥Æ®¸¦ ¹Ş¾Æ ÇöÀç ½ºÆù ÇÁ·ÎÇÊÀ» ±³Ã¼ÇÑ´Ù.
+	// [ë©˜íƒˆë¦¬í‹° ì›”ë“œ ìƒíƒœ ì¶”ê°€] ì¤‘ì•™ ìƒíƒœ ë³€ê²½ ì´ë²¤íŠ¸ë¥¼ ë°›ì•„ í˜„ì¬ ìŠ¤í° í”„ë¡œí•„ì„ êµì²´í•œë‹¤.
 	UFUNCTION()
 	void HandleMentalityWorldStateChanged(EMentalityWorldState NewState);
 
 	bool IsMonsterSpawnLevel(const UWorld& InWorld) const;
 	void ApplySpawnProfile(EMentalityWorldState NewState);
 	void RestartManageTimer();
+	void ConfigureActiveMonsterPools();
 
-	// [È£È¯ À¯Áö] MentalityWorldConfig¿¡ ·¹º§ ¸ñ·ÏÀÌ ¾øÀ¸¸é ±âÁ¸ ÇÊÅÍ¸¦ »ç¿ëÇÑ´Ù.
+	// [í˜¸í™˜ ìœ ì§€] MentalityWorldConfigì— ë ˆë²¨ ëª©ë¡ì´ ì—†ìœ¼ë©´ ê¸°ì¡´ í•„í„°ë¥¼ ì‚¬ìš©í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, Category = "Spawn Settings|Legacy")
 	TArray<TSoftObjectPtr<UWorld>> MonsterSpawnLevelNames;
 
-	// [È£È¯ À¯Áö] ¼³Á¤ ¿¡¼ÂÀÌ ¾øÀ» ¶§ ±âÁ¸ °íÁ¤ ½ºÆù ¸ñ·ÏÀ» »ç¿ëÇÑ´Ù.
+	// [í˜¸í™˜ ìœ ì§€] ì„¤ì • ì—ì…‹ì´ ì—†ì„ ë•Œ ê¸°ì¡´ ê³ ì • ìŠ¤í° ëª©ë¡ì„ ì‚¬ìš©í•œë‹¤.
 	UPROPERTY(EditDefaultsOnly, Category = "Spawn Settings|Legacy")
 	TArray<TSubclassOf<AActor>> MonsterClassesToSpawn;
 
@@ -54,9 +56,17 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Spawn Settings|Legacy")
 	float CheckInterval = 1.0f;
 
-	// [¸àÅ»¸®Æ¼ ¿ùµå »óÅÂ Ãß°¡] ÇöÀç ÇÁ·ÎÇÊ¿¡¼­ º¹»çÇÑ ·±Å¸ÀÓ ½ºÆù ¸ñ·ÏÀÌ´Ù.
+	// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] í˜„ì¬ í”„ë¡œí•„ì˜ ê° ëª¬ìŠ¤í„° í´ë˜ìŠ¤ì— ë¯¸ë¦¬ ìƒì„±í•  ê°œì²´ ìˆ˜ë‹¤.
+	UPROPERTY(EditDefaultsOnly, Category = "Spawn Settings|Pool", meta = (ClampMin = "0"))
+	int32 MonsterPoolPrewarmCountPerClass = 4;
+
+	// [ëª¬ìŠ¤í„° í’€ë§ ì¶”ê°€] ê±°ë¦¬ ì´íƒˆê³¼ ì‚¬ë§ í›„ í´ë˜ìŠ¤ë³„ë¡œ ê³„ì† ë³´ê´€í•  ìµœëŒ€ ê°œì²´ ìˆ˜ë‹¤.
+	UPROPERTY(EditDefaultsOnly, Category = "Spawn Settings|Pool", meta = (ClampMin = "1"))
+	int32 MonsterPoolMaxRetainedSizePerClass = 16;
+
+	// [ë©˜íƒˆë¦¬í‹° ì›”ë“œ ìƒíƒœ ì¶”ê°€] í˜„ì¬ í”„ë¡œí•„ì—ì„œ ë³µì‚¬í•œ ëŸ°íƒ€ì„ ìŠ¤í° ëª©ë¡ì´ë‹¤.
 	UPROPERTY(Transient)
-	TArray<TSubclassOf<AActor>> ActiveMonsterClasses;
+	TArray<TSubclassOf<ABaseMonster>> ActiveMonsterClasses;
 
 	UPROPERTY(Transient)
 	int32 ActiveMaxMonsters = 10;
@@ -73,8 +83,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AMainGameState> CachedMainGameState;
 
-	UPROPERTY()
-	TArray<TObjectPtr<AActor>> ActiveMonsters;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ABaseMonster>> ActiveMonsters;
 
 	bool bSpawnEnabledForCurrentWorld = false;
 	FTimerHandle SpawnTimerHandle;

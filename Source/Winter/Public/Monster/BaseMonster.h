@@ -10,6 +10,7 @@ class UAnimMontage;
 class UBehaviorTree;
 class UGameplayEffect;
 class UMonsterStatAttributeSet;
+class UMonsterPoolSubsystem;
 class UStaticMeshComponent;
 struct FOnAttributeChangeData;
 
@@ -47,6 +48,21 @@ public:
 	ABaseMonster();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	// [몬스터 풀링 추가] 풀 서브시스템이 생성한 몬스터를 비활성 대기 상태로 등록한다.
+	void AssignToPool(UMonsterPoolSubsystem* InOwningPool);
+
+	// [몬스터 풀링 추가] 체력·AI·이동·충돌을 초기화하고 지정 위치에서 다시 활성화한다.
+	void ActivateFromPool(const FTransform& SpawnTransform);
+
+	// [몬스터 풀링 추가] AI와 전투 상태를 정지하고 숨긴 뒤 풀 대기 상태로 전환한다.
+	void DeactivateToPool(bool bNotifyBlueprint = true);
+
+	// [몬스터 풀링 추가] 최대 보관 수 초과 시 AIController까지 분리하고 실제로 제거한다.
+	void DestroyPermanentlyFromPool();
+
+	UFUNCTION(BlueprintPure, Category = "Monster|Pool")
+	bool IsActiveMonster() const { return bIsActiveMonster; }
 
 	UFUNCTION(BlueprintPure, Category = "Monster|AI")
 	float GetAggroRange() const { return AggroRange; }
@@ -111,6 +127,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	// [몬스터 풀링 추가] 사망 지연 시간이 끝나면 Destroy 대신 풀로 반환한다.
+	virtual void LifeSpanExpired() override;
 
 	// [몬스터 추가] 몬스터가 공격 GameplayEffect의 Source가 되도록 자체 ASC를 가진다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Abilities")
@@ -193,6 +212,14 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|Death")
 	void OnDeathStarted();
 
+	/** 풀에서 재활성화할 때 사망 연출·래그돌·파티클을 원상 복구하는 Blueprint 확장 지점이다. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|Pool", meta = (DisplayName = "On Activated From Pool"))
+	void OnActivatedFromPool();
+
+	/** 풀로 반환될 때 Blueprint 타이머·이펙트를 정리하는 확장 지점이다. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|Pool", meta = (DisplayName = "On Deactivated To Pool"))
+	void OnDeactivatedToPool();
+
 	// [몬스터 성향 추가] 중립 몬스터가 처음 적대 상태가 될 때 연출을 연결할 Blueprint 지점이다.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Monster|AI|Disposition")
 	void OnProvoked();
@@ -205,6 +232,13 @@ private:
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
 	void HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void Die();
+	void ReturnToPool();
+	void ResetForPool(bool bNotifyBlueprint);
+	void ResetAbilityStateForReuse();
+	void CaptureInitialPoolState();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMonsterPoolSubsystem> OwningPool;
 
 	float NextAttackAllowedTime = 0.0f;
 
@@ -215,7 +249,13 @@ private:
 	TObjectPtr<UAnimMontage> PendingAttackMontage;
 
 	bool bIsDead = false;
+	// [몬스터 풀링 추가] 직접 배치 몬스터는 기본 활성 상태이며 풀 생성 중에는 FinishSpawning 전에 false가 된다.
+	bool bIsActiveMonster = true;
 	bool bIsProvoked = false;
 	bool bIsFleeing = false;
 	float FleeEndTime = 0.0f;
+	float InitialMaxHealth = 100.0f;
+	float InitialMaxWalkSpeed = 300.0f;
+	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
+	bool bInitialPoolStateCaptured = false;
 };

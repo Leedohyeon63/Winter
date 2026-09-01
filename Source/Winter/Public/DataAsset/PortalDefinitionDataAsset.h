@@ -27,5 +27,5 @@ public:
     FName TargetPortalId = NAME_None;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Portal")
-    FString InteractionPrompt = TEXT("¿Ãµø [F]");
+    FString InteractionPrompt = TEXT("Ïù¥Îèô [F]");
 };
