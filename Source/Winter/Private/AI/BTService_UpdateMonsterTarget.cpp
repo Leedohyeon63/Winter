@@ -1,12 +1,10 @@
 ﻿#include "AI/BTService_UpdateMonsterTarget.h"
 
-#include "AIController.h"
+#include "AI/MonsterAIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
-#include "GameFramework/Character.h"
-#include "Kismet/GameplayStatics.h"
 #include "Monster/BaseMonster.h"
 
 UBTService_UpdateMonsterTarget::UBTService_UpdateMonsterTarget()
@@ -44,9 +42,9 @@ void UBTService_UpdateMonsterTarget::TickNode(
 {
 	Super::TickNode(OwnerComp, NodeMemory, DeltaSeconds);
 
-	AAIController* AIController = OwnerComp.GetAIOwner();
+	AMonsterAIController* AIController = Cast<AMonsterAIController>(OwnerComp.GetAIOwner());
 	ABaseMonster* Monster = AIController ? Cast<ABaseMonster>(AIController->GetPawn()) : nullptr;
-	ACharacter* Player = UGameplayStatics::GetPlayerCharacter(&OwnerComp, 0);
+	AActor* ThreatActor = AIController ? AIController->GetDamageInstigator() : nullptr;
 	UBlackboardComponent* Blackboard = OwnerComp.GetBlackboardComponent();
 
 	if (!Blackboard)
@@ -62,6 +60,10 @@ void UBTService_UpdateMonsterTarget::TickNode(
 
 	auto ClearCombatTarget = [&]()
 	{
+		if (Monster)
+		{
+			Monster->CancelAttackForTargetChange(nullptr);
+		}
 		if (bHasTargetActorKey)
 		{
 			Blackboard->ClearValue(TargetActorKey.SelectedKeyName);
@@ -88,16 +90,16 @@ void UBTService_UpdateMonsterTarget::TickNode(
 		}
 	};
 
-	// [비선공 도주 추가] 도주 중에는 전투 Target을 만들지 않고 플레이어를 Threat로만 제공한다.
+	// 도주는 플레이어에 고정하지 않고 실제 피해를 준 공격자를 사용한다.
 	if (Monster
 		&& !Monster->IsDead()
-		&& IsValid(Player)
-		&& Monster->ShouldContinueFleeingFrom(Player))
+		&& IsValid(ThreatActor)
+		&& Monster->ShouldContinueFleeingFrom(ThreatActor))
 	{
 		ClearCombatTarget();
 		if (bHasThreatActorKey)
 		{
-			Blackboard->SetValueAsObject(ThreatActorKey.SelectedKeyName, Player);
+			Blackboard->SetValueAsObject(ThreatActorKey.SelectedKeyName, ThreatActor);
 		}
 		if (bHasFleeingKey)
 		{
@@ -107,11 +109,16 @@ void UBTService_UpdateMonsterTarget::TickNode(
 	}
 
 	ClearFleeTarget();
+	if (Monster && !IsValid(ThreatActor))
+	{
+		Monster->ResetFleeing();
+	}
 
+	AActor* TargetActor = AIController ? AIController->SelectCombatTarget() : nullptr;
 	if (!Monster
 		|| Monster->IsDead()
-		|| !IsValid(Player)
-		|| !Monster->CanEngageTarget(Player))
+		|| !IsValid(TargetActor)
+		|| !Monster->CanEngageTarget(TargetActor))
 	{
 		// [몬스터 성향 추가] 비선공과 아직 피격되지 않은 중립 몬스터는 Target을 만들지 않는다.
 		ClearCombatTarget();
@@ -119,7 +126,7 @@ void UBTService_UpdateMonsterTarget::TickNode(
 	}
 
 	const float DistanceSquared =
-		FVector::DistSquared(Monster->GetActorLocation(), Player->GetActorLocation());
+		FVector::DistSquared(Monster->GetActorLocation(), TargetActor->GetActorLocation());
 
 	if (DistanceSquared > FMath::Square(Monster->GetAggroRange()))
 	{
@@ -130,13 +137,14 @@ void UBTService_UpdateMonsterTarget::TickNode(
 
 	if (bHasTargetActorKey)
 	{
-		Blackboard->SetValueAsObject(TargetActorKey.SelectedKeyName, Player);
+		Monster->CancelAttackForTargetChange(TargetActor);
+		Blackboard->SetValueAsObject(TargetActorKey.SelectedKeyName, TargetActor);
 	}
-	AIController->SetFocus(Player, EAIFocusPriority::Gameplay);
+	AIController->SetFocus(TargetActor, EAIFocusPriority::Gameplay);
 
 	const bool bInAttackRange =
 		DistanceSquared <= FMath::Square(Monster->GetAttackRange())
-		&& AIController->LineOfSightTo(Player);
+		&& AIController->LineOfSightTo(TargetActor);
 
 	// [Behavior Tree 변경] 거리와 시야가 모두 충족돼야 공격 Sequence로 전환한다.
 	if (bHasAttackRangeKey)

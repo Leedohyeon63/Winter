@@ -7,6 +7,7 @@
 #include "Animation/AnimMontage.h"
 #include "Attribute/MonsterStatAttributeSet.h"
 #include "Combat/WinterCombat.h"
+#include "Combat/MonsterDamageEffect.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -28,6 +29,7 @@ ABaseMonster::ABaseMonster()
 	AbilitySystemComponent->SetIsReplicated(false);
 
 	AttributeSet = CreateDefaultSubobject<UMonsterStatAttributeSet>(TEXT("AttributeSet"));
+	AttackMonsterDamageEffect = UMonsterDamageEffect::StaticClass();
 
 	GetCapsuleComponent()->InitCapsuleSize(42.0f, 88.0f);
 
@@ -87,6 +89,7 @@ bool ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
 	CaptureInitialPoolState();
 
 	// [몬스터 풀링 추가] 이전 사망 지연 타이머와 전투 상태를 제거한 뒤 새 위치로 재배치한다.
+	++LifeGeneration;
 	SetLifeSpan(0.0f);
 	if (UWorld* World = GetWorld())
 	{
@@ -223,9 +226,23 @@ UBehaviorTree* ABaseMonster::GetBehaviorTreeAsset() const
 	return SelectedTree ? SelectedTree : BehaviorTreeAsset.Get();
 }
 
+FName ABaseMonster::GetDamagePerceptionTag() const
+{
+	return FName(TEXT("MonsterLife"), static_cast<int32>(LifeGeneration));
+}
+
+bool ABaseMonster::CanHuntMonster(const ABaseMonster* OtherMonster) const
+{
+	return bIsActiveMonster && !bIsDead
+		&& Disposition == EMonsterDisposition::Aggressive
+		&& IsValid(OtherMonster) && OtherMonster != this
+		&& OtherMonster->IsActiveMonster() && !OtherMonster->IsDead()
+		&& OtherMonster->GetMonsterLevel() < MonsterLevel;
+}
+
 bool ABaseMonster::CanEngageTarget(AActor* TargetActor) const
 {
-	if (!bIsActiveMonster || bIsDead || !IsValid(TargetActor))
+	if (!bIsActiveMonster || bIsDead || !IsValid(TargetActor) || TargetActor == this)
 	{
 		return false;
 	}
@@ -241,16 +258,27 @@ bool ABaseMonster::CanEngageTarget(AActor* TargetActor) const
 		return false;
 	}
 
+	const ABaseMonster* TargetMonster = Cast<ABaseMonster>(TargetActor);
+	if (TargetMonster && (!TargetMonster->IsActiveMonster() || TargetMonster->IsDead()))
+	{
+		return false;
+	}
+	const AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController());
+	AActor* Attacker = MonsterController ? MonsterController->GetDamageInstigator() : nullptr;
+	const bool bIsAttacker = Attacker == TargetActor;
+	const APawn* TargetPawn = Cast<APawn>(TargetActor);
+	const bool bIsPlayer = TargetPawn && TargetPawn->IsPlayerControlled();
+
 	switch (Disposition)
 	{
 	case EMonsterDisposition::Aggressive:
-		return true;
+		return bIsAttacker || (TargetMonster ? CanHuntMonster(TargetMonster) : bIsPlayer);
 
 	case EMonsterDisposition::Passive:
 		return false;
 
 	case EMonsterDisposition::Neutral:
-		return bIsProvoked;
+		return bIsProvoked && (bIsAttacker || (!Attacker && bIsPlayer));
 
 	default:
 		return false;
@@ -367,7 +395,7 @@ bool ABaseMonster::TryAttack(AActor* TargetActor)
 		|| !IsValid(TargetActor)
 		|| !CanEngageTarget(TargetActor)
 		|| !AbilitySystemComponent
-		|| !AttackDamageEffect
+		|| !GetDamageEffectForTarget(TargetActor)
 		|| AttackDamage <= 0.0f
 		|| PendingAttackTarget
 		|| !GetWorld())
@@ -430,7 +458,7 @@ bool ABaseMonster::ExecutePendingAttack()
 		|| !IsValid(TargetActor)
 		|| !CanEngageTarget(TargetActor)
 		|| !AbilitySystemComponent
-		|| !AttackDamageEffect
+		|| !GetDamageEffectForTarget(TargetActor)
 		|| !GetWorld())
 	{
 		return false;
@@ -474,7 +502,7 @@ bool ABaseMonster::ExecutePendingAttack()
 			AbilitySystemComponent,
 			this,
 			TargetActor,
-			AttackDamageEffect,
+			GetDamageEffectForTarget(TargetActor),
 			AttackDamage,
 			this,
 			&HitResult);
@@ -487,6 +515,20 @@ void ABaseMonster::CancelPendingAttack()
 {
 	PendingAttackTarget = nullptr;
 	PendingAttackMontage = nullptr;
+}
+
+void ABaseMonster::CancelAttackForTargetChange(AActor* NewTarget)
+{
+	if (PendingAttackTarget && PendingAttackTarget != NewTarget)
+	{
+		CancelPendingAttack();
+		StopAnimMontage();
+	}
+}
+
+TSubclassOf<UGameplayEffect> ABaseMonster::GetDamageEffectForTarget(AActor* TargetActor) const
+{
+	return Cast<ABaseMonster>(TargetActor) ? AttackMonsterDamageEffect : AttackDamageEffect;
 }
 
 void ABaseMonster::HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
@@ -511,18 +553,7 @@ void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
 		return;
 	}
 
-	// [성향별 피격 반응] 중립은 전투 상태로, 비선공은 도주 상태로 전환한다.
-	if (Data.NewValue > 0.0f && Data.NewValue < Data.OldValue)
-	{
-		if (Disposition == EMonsterDisposition::Neutral)
-		{
-			Provoke();
-		}
-		else if (Disposition == EMonsterDisposition::Passive)
-		{
-			StartFleeing();
-		}
-	}
+	// 공격자 판별과 성향별 반응은 AI Perception의 Damage 감지에서 처리한다.
 
 	if (Data.NewValue <= 0.0f)
 	{

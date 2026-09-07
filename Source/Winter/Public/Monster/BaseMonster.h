@@ -67,6 +67,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Monster|AI")
 	float GetAggroRange() const { return AggroRange; }
 
+	UFUNCTION(BlueprintPure, Category = "Monster|AI|Ecology")
+	int32 GetMonsterLevel() const { return MonsterLevel; }
+
+	UFUNCTION(BlueprintPure, Category = "Monster|AI|Ecology")
+	bool CanHuntMonster(const ABaseMonster* OtherMonster) const;
+
+	// 같은 풀 액터가 재사용돼도 이전 생애의 어그로와 피해 이벤트는 이어받지 않는다.
+	uint32 GetLifeGeneration() const { return LifeGeneration; }
+	FName GetDamagePerceptionTag() const;
+
 	UFUNCTION(BlueprintPure, Category = "Monster|AI")
 	UBehaviorTree* GetBehaviorTreeAsset() const;
 
@@ -119,6 +129,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Monster|Combat")
 	void CancelPendingAttack();
 
+	// 어그로가 바뀔 때 이전 대상의 Notify만 취소한다. 같은 공격자의 연속 피격은 공격을 중단하지 않는다.
+	void CancelAttackForTargetChange(AActor* NewTarget);
+
 	UPROPERTY(BlueprintAssignable, Category = "Monster|Events")
 	FOnMonsterHealthChangedSignature OnMonsterHealthChanged;
 
@@ -145,6 +158,10 @@ protected:
 	// [몬스터 성향 추가] 몬스터 Blueprint마다 선공/비선공/중립 중 하나를 기본값으로 지정한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Disposition")
 	EMonsterDisposition Disposition = EMonsterDisposition::Aggressive;
+
+	/** Aggressive 몬스터는 자신보다 레벨이 낮은 몬스터를 우선 사냥한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Ecology", meta = (ClampMin = "1"))
+	int32 MonsterLevel = 1;
 
 	// [몬스터 성향 추가] 선공 몬스터가 자동 실행할 Behavior Tree다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|AI|Behavior Tree")
@@ -195,6 +212,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat")
 	TSubclassOf<UGameplayEffect> AttackDamageEffect;
 
+	/** 몬스터 대상 피해. 기본 효과는 MonsterStatAttributeSet.IncomingDamage를 사용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat")
+	TSubclassOf<UGameplayEffect> AttackMonsterDamageEffect;
+
 	// [몬스터 공격 판정 보완] 지정하면 C++에서 재생하고 Notify 시점에 실제 피해 판정을 실행할 수 있다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat|Animation")
 	TObjectPtr<UAnimMontage> AttackMontage;
@@ -236,6 +257,7 @@ private:
 	bool ResetForPool(bool bNotifyBlueprint);
 	void ResetAbilityStateForReuse();
 	void CaptureInitialPoolState();
+	TSubclassOf<UGameplayEffect> GetDamageEffectForTarget(AActor* TargetActor) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMonsterPoolSubsystem> OwningPool;
@@ -249,6 +271,7 @@ private:
 	TObjectPtr<UAnimMontage> PendingAttackMontage;
 
 	bool bIsDead = false;
+	uint32 LifeGeneration = 0;
 	// [몬스터 풀링 추가] 직접 배치 몬스터는 기본 활성 상태이며 풀 생성 중에는 FinishSpawning 전에 false가 된다.
 	bool bIsActiveMonster = true;
 	bool bIsProvoked = false;

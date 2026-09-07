@@ -1,5 +1,8 @@
 ﻿#include "Attribute/MonsterStatAttributeSet.h"
 #include "GameplayEffectExtension.h"
+#include "GameFramework/Controller.h"
+#include "Monster/BaseMonster.h"
+#include "Perception/AISense_Damage.h"
 
 UMonsterStatAttributeSet::UMonsterStatAttributeSet()
 {
@@ -25,7 +28,32 @@ void UMonsterStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMo
 		SetIncomingDamage(0.0f);
 		if (DamageAmount > 0.0f)
 		{
+			const float AppliedDamage = FMath::Min(GetHealth(), DamageAmount);
+			ABaseMonster* Monster = Cast<ABaseMonster>(GetOwningActor());
+			const FName DamageTag = Monster ? Monster->GetDamagePerceptionTag() : NAME_None;
 			SetHealth(FMath::Clamp(GetHealth() - DamageAmount, 0.0f, GetMaxHealth()));
+			// GAS는 엔진 TakeDamage를 거치지 않으므로 실제 체력 피해를 Damage Sense에 직접 보고한다.
+			if (IsValid(Monster) && Monster->IsActiveMonster() && !Monster->IsDead()
+				&& AppliedDamage > 0.0f && DamageTag == Monster->GetDamagePerceptionTag())
+			{
+				const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetContext();
+				AActor* Attacker = Context.GetOriginalInstigator();
+				if (AController* AttackerController = Cast<AController>(Attacker))
+				{
+					Attacker = AttackerController->GetPawn();
+				}
+				if (!IsValid(Attacker))
+				{
+					AActor* Causer = Context.GetEffectCauser();
+					Attacker = IsValid(Causer) && Causer->GetInstigator() ? Causer->GetInstigator() : Causer;
+				}
+				if (IsValid(Attacker) && Attacker != Monster)
+				{
+					const FHitResult* Hit = Context.GetHitResult();
+					UAISense_Damage::ReportDamageEvent(Monster, Monster, Attacker, AppliedDamage,
+						Attacker->GetActorLocation(), Hit ? FVector(Hit->ImpactPoint) : Monster->GetActorLocation(), DamageTag);
+				}
+			}
 			UE_LOG(LogTemp, Log, TEXT("몬스터 데미지 받음 %f"), DamageAmount);
 		}
 	}
