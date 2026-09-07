@@ -240,11 +240,10 @@ void UWeaponManagerComponent::RefreshActiveWeapon()
 		CancelPendingAttack();
 	}
 
-	// [투사체 풀링 추가] 투사체 무기가 장착되거나 레벨 이동 후 복원되면 발사 전에 풀을 예열한다.
-	ConfigureProjectilePool(CurrentWeapon);
-
 	if (LastActiveWeapon != CurrentWeapon)
 	{
+		// [투사체 풀링 보완] 공격마다 풀을 다시 순회하지 않고 실제 무기 변경 시에만 설정과 예열을 적용한다.
+		ConfigureProjectilePool(CurrentWeapon);
 		LastActiveWeapon = CurrentWeapon;
 		OnActiveWeaponChanged.Broadcast(ActiveWeaponSlot, CurrentWeapon);
 	}
@@ -439,7 +438,6 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 		return false;
 	}
 
-	ConfigureProjectilePool(WeaponDefinition);
 	AWeaponProjectile* Projectile = ProjectilePool->AcquireProjectile(
 		WeaponDefinition->ProjectileClass,
 		SpawnTransform,
@@ -452,7 +450,7 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 	}
 
 	IAbilitySystemInterface* AbilityInterface = Cast<IAbilitySystemInterface>(CharacterOwner);
-	Projectile->InitializeProjectile(
+	return Projectile->InitializeProjectile(
 		CharacterOwner,
 		AbilityInterface ? AbilityInterface->GetAbilitySystemComponent() : nullptr,
 		WeaponDefinition->AttackDamageEffect,
@@ -460,7 +458,6 @@ bool UWeaponManagerComponent::ExecuteProjectileAttack(UItemDefinitionDataAsset* 
 		WeaponDefinition->AttackDamage,
 		WeaponDefinition->ProjectileSpeed,
 		WeaponDefinition->ProjectileLifeSeconds);
-	return true;
 }
 
 void UWeaponManagerComponent::ConfigureProjectilePool(

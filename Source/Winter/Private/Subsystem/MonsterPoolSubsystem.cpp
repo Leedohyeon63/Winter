@@ -9,6 +9,8 @@ DEFINE_LOG_CATEGORY(LogMonsterPool);
 
 void UMonsterPoolSubsystem::Deinitialize()
 {
+	bIsDeinitializing = true;
+
 	for (TPair<TSubclassOf<ABaseMonster>, FMonsterPoolBucket>& Pair : MonsterPools)
 	{
 		for (ABaseMonster* Monster : Pair.Value.AllMonsters)
@@ -29,7 +31,7 @@ void UMonsterPoolSubsystem::ConfigurePool(
 	const int32 PrewarmCount,
 	const int32 MaxRetainedSize)
 {
-	if (!MonsterClass || !GetWorld())
+	if (bIsDeinitializing || !MonsterClass || !GetWorld())
 	{
 		return;
 	}
@@ -62,13 +64,15 @@ void UMonsterPoolSubsystem::ConfigurePool(
 			ExcessMonster->DestroyPermanentlyFromPool();
 		}
 	}
+
+	ValidatePool(MonsterClass, Pool);
 }
 
 ABaseMonster* UMonsterPoolSubsystem::AcquireMonster(
 	const TSubclassOf<ABaseMonster> MonsterClass,
 	const FTransform& SpawnTransform)
 {
-	if (!MonsterClass || !GetWorld())
+	if (bIsDeinitializing || !MonsterClass || !GetWorld())
 	{
 		return nullptr;
 	}
@@ -94,7 +98,19 @@ ABaseMonster* UMonsterPoolSubsystem::AcquireMonster(
 		Pool.AllMonsters.Add(Monster);
 	}
 
-	Monster->ActivateFromPool(SpawnTransform);
+	if (!Monster->ActivateFromPool(SpawnTransform))
+	{
+		Pool.AllMonsters.RemoveSingleSwap(Monster);
+		Pool.InactiveMonsters.RemoveSingleSwap(Monster);
+		if (IsValid(Monster))
+		{
+			Monster->DestroyPermanentlyFromPool();
+		}
+		ValidatePool(MonsterClass, Pool);
+		return nullptr;
+	}
+
+	ValidatePool(MonsterClass, Pool);
 	UE_LOG(
 		LogMonsterPool,
 		Verbose,
@@ -113,6 +129,12 @@ void UMonsterPoolSubsystem::ReleaseMonster(ABaseMonster* Monster)
 		return;
 	}
 
+	if (bIsDeinitializing)
+	{
+		Monster->AssignToPool(nullptr);
+		return;
+	}
+
 	const TSubclassOf<ABaseMonster> MonsterClass = Monster->GetClass();
 	FMonsterPoolBucket* Pool = MonsterPools.Find(MonsterClass);
 	if (!Pool || !Pool->AllMonsters.Contains(Monster))
@@ -126,11 +148,12 @@ void UMonsterPoolSubsystem::ReleaseMonster(ABaseMonster* Monster)
 		return;
 	}
 
-	Monster->DeactivateToPool();
-	if (!IsValid(Monster))
+	if (!Monster->DeactivateToPool())
 	{
 		// [몬스터 풀링 추가] Blueprint 반환 이벤트에서 제거된 예외적인 개체는 풀 목록에도 남기지 않는다.
 		Pool->AllMonsters.RemoveSingleSwap(Monster);
+		Pool->InactiveMonsters.RemoveSingleSwap(Monster);
+		ValidatePool(MonsterClass, *Pool);
 		return;
 	}
 
@@ -144,10 +167,12 @@ void UMonsterPoolSubsystem::ReleaseMonster(ABaseMonster* Monster)
 			*GetNameSafe(MonsterClass.Get()),
 			Pool->AllMonsters.Num());
 		Monster->DestroyPermanentlyFromPool();
+		ValidatePool(MonsterClass, *Pool);
 		return;
 	}
 
 	Pool->InactiveMonsters.Add(Monster);
+	ValidatePool(MonsterClass, *Pool);
 }
 
 int32 UMonsterPoolSubsystem::GetActiveMonsterCount(
@@ -201,9 +226,12 @@ ABaseMonster* UMonsterPoolSubsystem::CreateMonster(
 	if (Monster)
 	{
 		// [몬스터 풀링 추가] 최초 예열은 실제 반환이 아니므로 Blueprint 반환 이벤트 없이 비활성화한다.
-		Monster->DeactivateToPool(false);
-		if (!IsValid(Monster))
+		if (!Monster->DeactivateToPool(false))
 		{
+			if (IsValid(Monster))
+			{
+				Monster->DestroyPermanentlyFromPool();
+			}
 			return nullptr;
 		}
 
@@ -224,8 +252,42 @@ void UMonsterPoolSubsystem::CleanupInvalidMonsters(FMonsterPoolBucket& Pool)
 		return !IsValid(Monster);
 	});
 
-	Pool.InactiveMonsters.RemoveAll([](const TObjectPtr<ABaseMonster>& Monster)
+	TSet<const ABaseMonster*> SeenInactiveMonsters;
+	Pool.InactiveMonsters.RemoveAll([&Pool, &SeenInactiveMonsters](const TObjectPtr<ABaseMonster>& Monster)
 	{
-		return !IsValid(Monster);
+		if (!IsValid(Monster)
+			|| !Pool.AllMonsters.Contains(Monster)
+			|| SeenInactiveMonsters.Contains(Monster.Get()))
+		{
+			return true;
+		}
+
+		SeenInactiveMonsters.Add(Monster.Get());
+		return false;
 	});
+}
+
+bool UMonsterPoolSubsystem::ValidatePool(
+	const TSubclassOf<ABaseMonster> MonsterClass,
+	const FMonsterPoolBucket& Pool) const
+{
+	bool bIsValidPool = Pool.InactiveMonsters.Num() <= Pool.AllMonsters.Num();
+	TSet<const ABaseMonster*> SeenMonsters;
+
+	for (const ABaseMonster* Monster : Pool.AllMonsters)
+	{
+		const bool bIsInactive = Pool.InactiveMonsters.Contains(Monster);
+		bIsValidPool &= IsValid(Monster)
+			&& !SeenMonsters.Contains(Monster)
+			&& Monster->IsActiveMonster() != bIsInactive;
+		SeenMonsters.Add(Monster);
+	}
+
+	ensureAlwaysMsgf(
+		bIsValidPool,
+		TEXT("Monster pool invariant failed. Class=%s All=%d Inactive=%d"),
+		*GetNameSafe(MonsterClass.Get()),
+		Pool.AllMonsters.Num(),
+		Pool.InactiveMonsters.Num());
+	return bIsValidPool;
 }

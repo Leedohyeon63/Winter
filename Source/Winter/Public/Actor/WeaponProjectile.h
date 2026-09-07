@@ -25,19 +25,19 @@ public:
 	void AssignToPool(UWeaponProjectilePoolSubsystem* InOwningPool);
 
 	// [투사체 풀링 추가] 대기 중인 개체를 새로운 위치와 소유자로 다시 활성화한다.
-	void ActivateFromPool(
+	bool ActivateFromPool(
 		const FTransform& SpawnTransform,
 		AActor* NewOwner,
 		APawn* NewInstigator);
 
 	// [투사체 풀링 추가] 이동·충돌·공격 정보를 지우고 대기 상태로 전환한다.
-	void DeactivateToPool();
+	bool DeactivateToPool();
 
 	UFUNCTION(BlueprintPure, Category = "Weapon|Projectile Pool")
 	bool IsActiveProjectile() const { return bIsActiveProjectile; }
 
 	// [투사체 추가] 생성한 WeaponManager가 공격 출처와 피해 효과를 전달한다.
-	void InitializeProjectile(
+	bool InitializeProjectile(
 		AActor* InAttackOwner,
 		UAbilitySystemComponent* InSourceAbilitySystem,
 		TSubclassOf<UGameplayEffect> InDamageEffect,
@@ -84,7 +84,7 @@ private:
 
 	bool TryApplyDamage(AActor* TargetActor, const FHitResult* HitResult);
 	void ReturnToPool();
-	void ResetForPool(bool bNotifyBlueprint);
+	bool ResetForPool(bool bNotifyBlueprint);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWeaponProjectilePoolSubsystem> OwningPool;

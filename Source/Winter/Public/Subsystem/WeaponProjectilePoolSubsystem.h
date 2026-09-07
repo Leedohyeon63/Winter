@@ -62,8 +62,13 @@ public:
 private:
 	AWeaponProjectile* CreateProjectile(TSubclassOf<AWeaponProjectile> ProjectileClass);
 	void CleanupInvalidProjectiles(FWeaponProjectilePoolBucket& Pool);
+	bool ValidatePool(
+		TSubclassOf<AWeaponProjectile> ProjectileClass,
+		const FWeaponProjectilePoolBucket& Pool) const;
 
 	// [투사체 풀링 추가] UPROPERTY로 보관해 비활성 투사체 참조가 GC 중에도 유지되게 한다.
 	UPROPERTY(Transient)
 	TMap<TSubclassOf<AWeaponProjectile>, FWeaponProjectilePoolBucket> ProjectilePools;
+
+	bool bIsDeinitializing = false;
 };

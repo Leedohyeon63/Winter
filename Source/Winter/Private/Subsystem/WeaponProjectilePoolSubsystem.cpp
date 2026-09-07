@@ -9,6 +9,8 @@ DEFINE_LOG_CATEGORY(LogWeaponProjectilePool);
 
 void UWeaponProjectilePoolSubsystem::Deinitialize()
 {
+	bIsDeinitializing = true;
+
 	// [투사체 풀링 추가] 월드 종료 중 투사체가 이미 사라져도 풀 참조를 안전하게 정리한다.
 	for (TPair<TSubclassOf<AWeaponProjectile>, FWeaponProjectilePoolBucket>& Pair : ProjectilePools)
 	{
@@ -30,7 +32,7 @@ void UWeaponProjectilePoolSubsystem::ConfigurePool(
 	const int32 PrewarmCount,
 	const int32 MaxRetainedSize)
 {
-	if (!ProjectileClass || !GetWorld())
+	if (bIsDeinitializing || !ProjectileClass || !GetWorld())
 	{
 		return;
 	}
@@ -65,6 +67,8 @@ void UWeaponProjectilePoolSubsystem::ConfigurePool(
 			ExcessProjectile->Destroy();
 		}
 	}
+
+	ValidatePool(ProjectileClass, Pool);
 }
 
 AWeaponProjectile* UWeaponProjectilePoolSubsystem::AcquireProjectile(
@@ -73,7 +77,7 @@ AWeaponProjectile* UWeaponProjectilePoolSubsystem::AcquireProjectile(
 	AActor* NewOwner,
 	APawn* NewInstigator)
 {
-	if (!ProjectileClass || !GetWorld())
+	if (bIsDeinitializing || !ProjectileClass || !GetWorld())
 	{
 		return nullptr;
 	}
@@ -99,7 +103,20 @@ AWeaponProjectile* UWeaponProjectilePoolSubsystem::AcquireProjectile(
 		Pool.AllProjectiles.Add(Projectile);
 	}
 
-	Projectile->ActivateFromPool(SpawnTransform, NewOwner, NewInstigator);
+	if (!Projectile->ActivateFromPool(SpawnTransform, NewOwner, NewInstigator))
+	{
+		Pool.AllProjectiles.RemoveSingleSwap(Projectile);
+		Pool.InactiveProjectiles.RemoveSingleSwap(Projectile);
+		if (IsValid(Projectile))
+		{
+			Projectile->AssignToPool(nullptr);
+			Projectile->Destroy();
+		}
+		ValidatePool(ProjectileClass, Pool);
+		return nullptr;
+	}
+
+	ValidatePool(ProjectileClass, Pool);
 	UE_LOG(
 		LogWeaponProjectilePool,
 		Verbose,
@@ -118,6 +135,12 @@ void UWeaponProjectilePoolSubsystem::ReleaseProjectile(AWeaponProjectile* Projec
 		return;
 	}
 
+	if (bIsDeinitializing)
+	{
+		Projectile->AssignToPool(nullptr);
+		return;
+	}
+
 	const TSubclassOf<AWeaponProjectile> ProjectileClass = Projectile->GetClass();
 	FWeaponProjectilePoolBucket* Pool = ProjectilePools.Find(ProjectileClass);
 	if (!Pool || !Pool->AllProjectiles.Contains(Projectile))
@@ -133,11 +156,12 @@ void UWeaponProjectilePoolSubsystem::ReleaseProjectile(AWeaponProjectile* Projec
 		return;
 	}
 
-	Projectile->DeactivateToPool();
-	if (!IsValid(Projectile))
+	if (!Projectile->DeactivateToPool())
 	{
 		// [투사체 풀링 추가] Blueprint 반환 이벤트에서 제거된 예외적인 개체는 풀 목록에도 남기지 않는다.
 		Pool->AllProjectiles.RemoveSingleSwap(Projectile);
+		Pool->InactiveProjectiles.RemoveSingleSwap(Projectile);
+		ValidatePool(ProjectileClass, *Pool);
 		return;
 	}
 
@@ -153,10 +177,12 @@ void UWeaponProjectilePoolSubsystem::ReleaseProjectile(AWeaponProjectile* Projec
 			Pool->AllProjectiles.Num());
 		Projectile->AssignToPool(nullptr);
 		Projectile->Destroy();
+		ValidatePool(ProjectileClass, *Pool);
 		return;
 	}
 
 	Pool->InactiveProjectiles.Add(Projectile);
+	ValidatePool(ProjectileClass, *Pool);
 }
 
 int32 UWeaponProjectilePoolSubsystem::GetActiveProjectileCount(
@@ -210,9 +236,13 @@ AWeaponProjectile* UWeaponProjectilePoolSubsystem::CreateProjectile(
 	if (Projectile)
 	{
 		// [투사체 풀링 추가] BeginPlay에서 자동 재생된 Blueprint 이펙트도 정지할 수 있게 반환 이벤트를 호출한다.
-		Projectile->DeactivateToPool();
-		if (!IsValid(Projectile))
+		if (!Projectile->DeactivateToPool())
 		{
+			if (IsValid(Projectile))
+			{
+				Projectile->AssignToPool(nullptr);
+				Projectile->Destroy();
+			}
 			return nullptr;
 		}
 		UE_LOG(
@@ -233,8 +263,42 @@ void UWeaponProjectilePoolSubsystem::CleanupInvalidProjectiles(
 		return !IsValid(Projectile);
 	});
 
-	Pool.InactiveProjectiles.RemoveAll([](const TObjectPtr<AWeaponProjectile>& Projectile)
+	TSet<const AWeaponProjectile*> SeenInactiveProjectiles;
+	Pool.InactiveProjectiles.RemoveAll([&Pool, &SeenInactiveProjectiles](const TObjectPtr<AWeaponProjectile>& Projectile)
 	{
-		return !IsValid(Projectile);
+		if (!IsValid(Projectile)
+			|| !Pool.AllProjectiles.Contains(Projectile)
+			|| SeenInactiveProjectiles.Contains(Projectile.Get()))
+		{
+			return true;
+		}
+
+		SeenInactiveProjectiles.Add(Projectile.Get());
+		return false;
 	});
+}
+
+bool UWeaponProjectilePoolSubsystem::ValidatePool(
+	const TSubclassOf<AWeaponProjectile> ProjectileClass,
+	const FWeaponProjectilePoolBucket& Pool) const
+{
+	bool bIsValidPool = Pool.InactiveProjectiles.Num() <= Pool.AllProjectiles.Num();
+	TSet<const AWeaponProjectile*> SeenProjectiles;
+
+	for (const AWeaponProjectile* Projectile : Pool.AllProjectiles)
+	{
+		const bool bIsInactive = Pool.InactiveProjectiles.Contains(Projectile);
+		bIsValidPool &= IsValid(Projectile)
+			&& !SeenProjectiles.Contains(Projectile)
+			&& Projectile->IsActiveProjectile() != bIsInactive;
+		SeenProjectiles.Add(Projectile);
+	}
+
+	ensureAlwaysMsgf(
+		bIsValidPool,
+		TEXT("Projectile pool invariant failed. Class=%s All=%d Inactive=%d"),
+		*GetNameSafe(ProjectileClass.Get()),
+		Pool.AllProjectiles.Num(),
+		Pool.InactiveProjectiles.Num());
+	return bIsValidPool;
 }

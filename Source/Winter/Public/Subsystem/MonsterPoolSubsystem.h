@@ -55,8 +55,13 @@ public:
 private:
 	ABaseMonster* CreateMonster(TSubclassOf<ABaseMonster> MonsterClass);
 	void CleanupInvalidMonsters(FMonsterPoolBucket& Pool);
+	bool ValidatePool(
+		TSubclassOf<ABaseMonster> MonsterClass,
+		const FMonsterPoolBucket& Pool) const;
 
 	// [몬스터 풀링 추가] 비활성 몬스터와 AIController가 GC되지 않도록 강한 참조로 보관한다.
 	UPROPERTY(Transient)
 	TMap<TSubclassOf<ABaseMonster>, FMonsterPoolBucket> MonsterPools;
+
+	bool bIsDeinitializing = false;
 };

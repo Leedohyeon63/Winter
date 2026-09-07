@@ -10,10 +10,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
 #include "Subsystem/MonsterPoolSubsystem.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WinterGameplayTags.h"
 
@@ -65,14 +67,32 @@ void ABaseMonster::AssignToPool(UMonsterPoolSubsystem* InOwningPool)
 	if (InOwningPool)
 	{
 		bIsActiveMonster = false;
+		SetActorEnableCollision(false);
+		SetActorHiddenInGame(true);
+		SetActorTickEnabled(false);
 	}
 }
 
-void ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
+bool ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
 {
+	if (!IsValid(OwningPool) || bIsActiveMonster || SpawnTransform.ContainsNaN())
+	{
+		ensureMsgf(
+			!bIsActiveMonster,
+			TEXT("Monster pool attempted to acquire an already active monster: %s"),
+			*GetNameSafe(this));
+		return false;
+	}
+
+	CaptureInitialPoolState();
+
 	// [몬스터 풀링 추가] 이전 사망 지연 타이머와 전투 상태를 제거한 뒤 새 위치로 재배치한다.
 	SetLifeSpan(0.0f);
-	bIsActiveMonster = true;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearAllTimersForObject(this);
+	}
+
 	bIsDead = false;
 	bIsProvoked = false;
 	ResetFleeing();
@@ -80,27 +100,57 @@ void ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
 	NextAttackAllowedTime = 0.0f;
 	StopAnimMontage();
 
-	SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	// [몬스터 풀링 보완] 복원 중에는 충돌과 AI 판단이 실행되지 않게 한다.
+	SetActorEnableCollision(false);
 	SetActorHiddenInGame(false);
-	SetActorEnableCollision(true);
-	SetActorTickEnabled(true);
+	SetActorTickEnabled(bInitialActorTickEnabled);
+	SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
+	GetCapsuleComponent()->SetGenerateOverlapEvents(bInitialCapsuleGenerateOverlapEvents);
 
 	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
 	{
-		MonsterMesh->bPauseAnims = false;
-		MonsterMesh->SetComponentTickEnabled(true);
+		MonsterMesh->SetSimulatePhysics(false);
+		MonsterMesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
+		MonsterMesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		if (MonsterMesh->GetAttachParent() != GetCapsuleComponent())
+		{
+			MonsterMesh->AttachToComponent(
+				GetCapsuleComponent(),
+				FAttachmentTransformRules::KeepRelativeTransform);
+		}
+		MonsterMesh->SetRelativeTransform(InitialMeshRelativeTransform);
+		MonsterMesh->SetCollisionEnabled(InitialMeshCollision);
+		MonsterMesh->SetGenerateOverlapEvents(bInitialMeshGenerateOverlapEvents);
+		MonsterMesh->bPauseAnims = bInitialMeshPauseAnims;
+		MonsterMesh->SetComponentTickEnabled(bInitialMeshTickEnabled);
+		MonsterMesh->SetSimulatePhysics(bInitialMeshSimulatePhysics);
 	}
 
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
 	{
-		Movement->SetComponentTickEnabled(true);
+		Movement->StopMovementImmediately();
+		Movement->SetComponentTickEnabled(bInitialMovementTickEnabled);
 		Movement->MaxWalkSpeed = InitialMaxWalkSpeed;
-		Movement->SetMovementMode(MOVE_Walking);
 	}
 
 	ResetAbilityStateForReuse();
+	if (!IsValid(this))
+	{
+		return false;
+	}
+	bIsActiveMonster = true;
+	SetActorEnableCollision(true);
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->SetMovementMode(MOVE_Walking);
+	}
+
 	OnActivatedFromPool();
+	if (!IsValid(this) || !bIsActiveMonster)
+	{
+		return false;
+	}
 
 	// [몬스터 풀링 추가] 풀 대기 중 정지했던 BT를 같은 AIController에서 다시 시작한다.
 	const bool bHadController = GetController() != nullptr;
@@ -108,18 +158,29 @@ void ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
 	{
 		SpawnDefaultController();
 	}
+
+	AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController());
+	if (!MonsterController)
+	{
+		UE_LOG(
+			LogMonsterPool,
+			Error,
+			TEXT("Failed to activate pooled monster because its AIController is invalid. Monster=%s"),
+			*GetNameSafe(this));
+		return false;
+	}
+
 	if (bHadController)
 	{
-		if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
-		{
-			MonsterController->ActivatePooledMonster();
-		}
+		MonsterController->ActivatePooledMonster();
 	}
+
+	return IsValid(this) && bIsActiveMonster;
 }
 
-void ABaseMonster::DeactivateToPool(const bool bNotifyBlueprint)
+bool ABaseMonster::DeactivateToPool(const bool bNotifyBlueprint)
 {
-	ResetForPool(bNotifyBlueprint);
+	return ResetForPool(bNotifyBlueprint);
 }
 
 void ABaseMonster::DestroyPermanentlyFromPool()
@@ -127,6 +188,10 @@ void ABaseMonster::DestroyPermanentlyFromPool()
 	// [몬스터 풀링 추가] 일반 Release와 달리 풀 참조를 끊고 AIController의 Pawn 파괴 경로까지 실행한다.
 	OwningPool = nullptr;
 	ResetForPool(false);
+	if (!IsValid(this))
+	{
+		return;
+	}
 	DetachFromControllerPendingDestroy();
 	Destroy();
 }
@@ -332,6 +397,10 @@ bool ABaseMonster::TryAttack(AActor* TargetActor)
 	const float MontageDuration = AttackMontage ? PlayAnimMontage(AttackMontage.Get()) : 0.0f;
 	// [몬스터 공격 판정 보완] C++ 몽타주 시작 후 Blueprint 이벤트는 음향·파티클 같은 추가 연출에 사용한다.
 	OnAttackStarted(TargetActor);
+	if (!IsValid(this) || !bIsActiveMonster || bIsDead)
+	{
+		return false;
+	}
 	if (bExecuteAttackOnAnimNotify && MontageDuration > 0.0f)
 	{
 		PendingAttackMontage = AttackMontage;
@@ -437,6 +506,10 @@ void ABaseMonster::HandleHealthChanged(const FOnAttributeChangeData& Data)
 	}
 
 	OnMonsterHealthChanged.Broadcast(Data.NewValue, AttributeSet->GetMaxHealth());
+	if (!IsValid(this) || !bIsActiveMonster)
+	{
+		return;
+	}
 
 	// [성향별 피격 반응] 중립은 전투 상태로, 비선공은 도주 상태로 전환한다.
 	if (Data.NewValue > 0.0f && Data.NewValue < Data.OldValue)
@@ -485,7 +558,16 @@ void ABaseMonster::Die()
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	OnMonsterDied.Broadcast();
+	if (!IsValid(this) || !bIsActiveMonster)
+	{
+		return;
+	}
+
 	OnDeathStarted();
+	if (!IsValid(this) || !bIsActiveMonster)
+	{
+		return;
+	}
 
 	// [몬스터 풀링 추가] 0초면 즉시 반환하고, 지연값이 있으면 사망 연출 후 LifeSpanExpired에서 반환한다.
 	if (DestroyDelayAfterDeath <= KINDA_SMALL_NUMBER)
@@ -515,12 +597,24 @@ void ABaseMonster::ReturnToPool()
 	DestroyPermanentlyFromPool();
 }
 
-void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
+bool ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 {
+	if (!IsValid(this))
+	{
+		return false;
+	}
+
 	// [몬스터 풀링 추가] BeginPlay 전 생성 경로에서도 Construction Script 결과를 한 번 보존한다.
 	CaptureInitialPoolState();
 
 	SetLifeSpan(0.0f);
+	if (UWorld* World = GetWorld())
+	{
+		// [몬스터 풀링 보완] 사망 연출과 Blueprint가 등록한 액터 타이머가 다음 생애에 남지 않게 한다.
+		World->GetTimerManager().ClearAllTimersForObject(this);
+	}
+
+	// [몬스터 풀링 보완] 콜백 중 재진입해도 전투와 피격이 먼저 차단되도록 활성 플래그부터 내린다.
 	bIsActiveMonster = false;
 	bIsDead = false;
 	bIsProvoked = false;
@@ -528,11 +622,6 @@ void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 	CancelPendingAttack();
 	NextAttackAllowedTime = 0.0f;
 	StopAnimMontage();
-
-	if (bNotifyBlueprint)
-	{
-		OnDeactivatedToPool();
-	}
 
 	if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
 	{
@@ -547,8 +636,15 @@ void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 	}
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
 	{
+		// [몬스터 풀링 보완] 래그돌 속도와 물리 상태가 대기 중에도 계속 계산되지 않게 한다.
+		MonsterMesh->SetSimulatePhysics(false);
+		MonsterMesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
+		MonsterMesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		MonsterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MonsterMesh->SetGenerateOverlapEvents(false);
 		MonsterMesh->bPauseAnims = true;
 		MonsterMesh->SetComponentTickEnabled(false);
 	}
@@ -556,6 +652,7 @@ void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 	if (HasActorBegunPlay() && AbilitySystemComponent)
 	{
 		// [몬스터 풀링 추가] BeginPlay 이후의 지속 GameplayEffect와 사망 태그가 다음 사용에 남지 않게 한다.
+		AbilitySystemComponent->CancelAllAbilities();
 		AbilitySystemComponent->RemoveActiveEffects(FGameplayEffectQuery());
 		AbilitySystemComponent->RemoveLooseGameplayTag(WinterGameplayTags::State_Dead);
 	}
@@ -563,6 +660,14 @@ void ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 	SetActorEnableCollision(false);
 	SetActorHiddenInGame(true);
 	SetActorTickEnabled(false);
+
+	// [몬스터 풀링 보완] Blueprint가 여기서 Destroy하더라도 이후 C++가 액터에 접근하지 않는다.
+	if (bNotifyBlueprint)
+	{
+		OnDeactivatedToPool();
+	}
+
+	return IsValid(this);
 }
 
 void ABaseMonster::ResetAbilityStateForReuse()
@@ -574,6 +679,7 @@ void ABaseMonster::ResetAbilityStateForReuse()
 
 	// [몬스터 풀링 추가] 이전 생애의 지속 효과와 사망 태그를 지우고 체력을 Blueprint 기본 최대값으로 복원한다.
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	AbilitySystemComponent->CancelAllAbilities();
 	AbilitySystemComponent->RemoveActiveEffects(FGameplayEffectQuery());
 	AbilitySystemComponent->RemoveLooseGameplayTag(WinterGameplayTags::State_Dead);
 	AbilitySystemComponent->SetNumericAttributeBase(
@@ -604,10 +710,22 @@ void ABaseMonster::CaptureInitialPoolState()
 	if (GetCharacterMovement())
 	{
 		InitialMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+		bInitialMovementTickEnabled = GetCharacterMovement()->IsComponentTickEnabled();
 	}
 	if (GetCapsuleComponent())
 	{
 		InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
+		bInitialCapsuleGenerateOverlapEvents = GetCapsuleComponent()->GetGenerateOverlapEvents();
 	}
+	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
+	{
+		InitialMeshCollision = MonsterMesh->GetCollisionEnabled();
+		InitialMeshRelativeTransform = MonsterMesh->GetRelativeTransform();
+		bInitialMeshTickEnabled = MonsterMesh->IsComponentTickEnabled();
+		bInitialMeshPauseAnims = MonsterMesh->bPauseAnims;
+		bInitialMeshGenerateOverlapEvents = MonsterMesh->GetGenerateOverlapEvents();
+		bInitialMeshSimulatePhysics = MonsterMesh->IsSimulatingPhysics();
+	}
+	bInitialActorTickEnabled = IsActorTickEnabled();
 	bInitialPoolStateCaptured = true;
 }

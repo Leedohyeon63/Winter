@@ -53,10 +53,10 @@ public:
 	void AssignToPool(UMonsterPoolSubsystem* InOwningPool);
 
 	// [몬스터 풀링 추가] 체력·AI·이동·충돌을 초기화하고 지정 위치에서 다시 활성화한다.
-	void ActivateFromPool(const FTransform& SpawnTransform);
+	bool ActivateFromPool(const FTransform& SpawnTransform);
 
 	// [몬스터 풀링 추가] AI와 전투 상태를 정지하고 숨긴 뒤 풀 대기 상태로 전환한다.
-	void DeactivateToPool(bool bNotifyBlueprint = true);
+	bool DeactivateToPool(bool bNotifyBlueprint = true);
 
 	// [몬스터 풀링 추가] 최대 보관 수 초과 시 AIController까지 분리하고 실제로 제거한다.
 	void DestroyPermanentlyFromPool();
@@ -233,7 +233,7 @@ private:
 	void HandleAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void Die();
 	void ReturnToPool();
-	void ResetForPool(bool bNotifyBlueprint);
+	bool ResetForPool(bool bNotifyBlueprint);
 	void ResetAbilityStateForReuse();
 	void CaptureInitialPoolState();
 
@@ -257,5 +257,14 @@ private:
 	float InitialMaxHealth = 100.0f;
 	float InitialMaxWalkSpeed = 300.0f;
 	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
+	ECollisionEnabled::Type InitialMeshCollision = ECollisionEnabled::NoCollision;
+	FTransform InitialMeshRelativeTransform = FTransform::Identity;
+	bool bInitialActorTickEnabled = false;
+	bool bInitialMovementTickEnabled = true;
+	bool bInitialCapsuleGenerateOverlapEvents = true;
+	bool bInitialMeshTickEnabled = true;
+	bool bInitialMeshPauseAnims = false;
+	bool bInitialMeshGenerateOverlapEvents = false;
+	bool bInitialMeshSimulatePhysics = false;
 	bool bInitialPoolStateCaptured = false;
 };

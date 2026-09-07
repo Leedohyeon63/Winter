@@ -1,10 +1,13 @@
 ﻿#include "Actor/WeaponProjectile.h"
 
+#include "AbilitySystemComponent.h"
 #include "Combat/WinterCombat.h"
 #include "Components/SphereComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameplayEffect.h"
 #include "Subsystem/WeaponProjectilePoolSubsystem.h"
+#include "TimerManager.h"
 
 AWeaponProjectile::AWeaponProjectile()
 {
@@ -38,13 +41,27 @@ void AWeaponProjectile::AssignToPool(UWeaponProjectilePoolSubsystem* InOwningPoo
 	ResetForPool(false);
 }
 
-void AWeaponProjectile::ActivateFromPool(
+bool AWeaponProjectile::ActivateFromPool(
 	const FTransform& SpawnTransform,
 	AActor* NewOwner,
 	APawn* NewInstigator)
 {
+	if (!IsValid(OwningPool) || bIsActiveProjectile || SpawnTransform.ContainsNaN())
+	{
+		ensureMsgf(
+			!bIsActiveProjectile,
+			TEXT("Projectile pool attempted to acquire an already active projectile: %s"),
+			*GetNameSafe(this));
+		return false;
+	}
+
 	// [투사체 풀링 추가] 이전 사용의 수명 타이머와 충돌 상태를 제거하고 새 발사 위치로 순간 이동한다.
 	SetLifeSpan(0.0f);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearAllTimersForObject(this);
+	}
+
 	bIsActiveProjectile = true;
 	bHasImpacted = false;
 	SetOwner(NewOwner);
@@ -65,14 +82,16 @@ void AWeaponProjectile::ActivateFromPool(
 		ProjectileMovement->Deactivate();
 		ProjectileMovement->SetComponentTickEnabled(false);
 	}
+
+	return IsValid(this) && bIsActiveProjectile;
 }
 
-void AWeaponProjectile::DeactivateToPool()
+bool AWeaponProjectile::DeactivateToPool()
 {
-	ResetForPool(true);
+	return ResetForPool(true);
 }
 
-void AWeaponProjectile::InitializeProjectile(
+bool AWeaponProjectile::InitializeProjectile(
 	AActor* InAttackOwner,
 	UAbilitySystemComponent* InSourceAbilitySystem,
 	TSubclassOf<UGameplayEffect> InDamageEffect,
@@ -81,12 +100,24 @@ void AWeaponProjectile::InitializeProjectile(
 	float InSpeed,
 	float InLifeSeconds)
 {
-	// [투사체 풀링 추가] 풀을 거치지 않고 직접 생성된 기존 호출도 정상 활성화되게 한다.
-	if (!bIsActiveProjectile)
+	// [하위 호환] 풀을 사용하지 않고 직접 Spawn한 기존 호출도 같은 초기화 경로를 사용할 수 있게 한다.
+	if (!bIsActiveProjectile && !IsValid(OwningPool))
 	{
 		bIsActiveProjectile = true;
+		bHasImpacted = false;
 		SetActorHiddenInGame(false);
+		SetActorEnableCollision(false);
 		SetActorTickEnabled(true);
+	}
+
+	if (!bIsActiveProjectile
+		|| !IsValid(InAttackOwner)
+		|| !IsValid(InSourceAbilitySystem)
+		|| !InDamageEffect
+		|| InDamageAmount <= 0.0f)
+	{
+		ReturnToPool();
+		return false;
 	}
 
 	AttackOwner = InAttackOwner;
@@ -123,6 +154,7 @@ void AWeaponProjectile::InitializeProjectile(
 
 	SetLifeSpan(FMath::Max(0.1f, InLifeSeconds));
 	OnActivatedFromPool();
+	return IsValid(this) && bIsActiveProjectile;
 }
 
 void AWeaponProjectile::LifeSpanExpired()
@@ -174,7 +206,7 @@ bool AWeaponProjectile::TryApplyDamage(AActor* TargetActor, const FHitResult* Hi
 {
 	if (!IsValid(TargetActor)
 		|| TargetActor == AttackOwner
-		|| !SourceAbilitySystem
+		|| !IsValid(SourceAbilitySystem)
 		|| !DamageEffect
 		|| DamageAmount <= 0.0f)
 	{
@@ -215,14 +247,23 @@ void AWeaponProjectile::ReturnToPool()
 	Destroy();
 }
 
-void AWeaponProjectile::ResetForPool(const bool bNotifyBlueprint)
+bool AWeaponProjectile::ResetForPool(const bool bNotifyBlueprint)
 {
-	SetLifeSpan(0.0f);
-
-	if (bNotifyBlueprint)
+	if (!IsValid(this))
 	{
-		OnDeactivatedToPool();
+		return false;
 	}
+
+	SetLifeSpan(0.0f);
+	if (UWorld* World = GetWorld())
+	{
+		// [투사체 풀링 보완] Blueprint가 액터에 건 타이머도 다음 발사까지 남지 않게 한다.
+		World->GetTimerManager().ClearAllTimersForObject(this);
+	}
+
+	// [투사체 풀링 보완] 콜백 중 재진입하더라도 충돌과 중복 반환이 먼저 차단되게 한다.
+	bHasImpacted = true;
+	bIsActiveProjectile = false;
 
 	if (CollisionComponent)
 	{
@@ -247,12 +288,18 @@ void AWeaponProjectile::ResetForPool(const bool bNotifyBlueprint)
 	DamageEffect = nullptr;
 	DamageSourceObject = nullptr;
 	DamageAmount = 0.0f;
-	bHasImpacted = true;
-	bIsActiveProjectile = false;
 
 	SetOwner(nullptr);
 	SetInstigator(nullptr);
 	SetActorEnableCollision(false);
 	SetActorHiddenInGame(true);
 	SetActorTickEnabled(false);
+
+	// [투사체 풀링 보완] Blueprint가 여기서 Destroy하더라도 이후 C++가 액터에 접근하지 않는다.
+	if (bNotifyBlueprint)
+	{
+		OnDeactivatedToPool();
+	}
+
+	return IsValid(this);
 }
