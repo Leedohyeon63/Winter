@@ -28,10 +28,10 @@ struct WINTER_API FMentalityMonsterSpawnSettings
 	int32 MaxMonsters = 10;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "0.0"))
-	float SpawnRadius = 1500.0f;
+	float SpawnRadius = 10000.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "0.0"))
-	float DespawnRadius = 3000.0f;
+	float DespawnRadius = 15000.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "0.1"))
 	float CheckInterval = 1.0f;
