@@ -151,6 +151,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Abilities")
 	TObjectPtr<UMonsterStatAttributeSet> AttributeSet;
 
+	/** 최초 스폰과 풀 재사용 시 적용할 최대 체력 및 시작 체력. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Stats", meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float InitialHealth = 100.0f;
+
 	// [몬스터 추가] 스켈레탈 메시가 준비되기 전 스폰과 이동을 눈으로 확인하기 위한 임시 외형이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|Components")
 	TObjectPtr<UStaticMeshComponent> PlaceholderMesh;
@@ -223,6 +227,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Combat|Animation")
 	bool bExecuteAttackOnAnimNotify = false;
 
+	/** 사망 시 자동 재생하고 회수까지 마지막 포즈를 유지한다. Anim Blueprint에 같은 Slot이 필요하다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Death")
+	TObjectPtr<UAnimMontage> DeathMontage;
+
+	/** 사망부터 회수까지의 최소 시간. 사망 몽타주가 더 길면 재생 시간만큼 기다린다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster|Death", meta = (ClampMin = "0.0"))
 	float DestroyDelayAfterDeath = 1.0f;
 

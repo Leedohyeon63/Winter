@@ -13,6 +13,7 @@ class UInputAction;
 class UInputMappingContext;
 class UPlayerInventoryComponent;
 class UWeaponManagerComponent;
+class UPostProcessComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChanged, float, CurrentValue, float, MaxValue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHoverInteractableChanged, bool, bIsInteractable, FString, PromptText);
@@ -59,6 +60,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UI|Stats")
 	FOnStatChanged OnMentalityChanged;
 
+	UFUNCTION(BlueprintPure, Category = "Player|Mentality")
+	float GetMentalityVisualIntensity() const { return MentalityVisualIntensity; }
+
 	UPROPERTY(BlueprintAssignable, Category = "UI|Interaction")
 	FOnHoverInteractableChanged OnHoverInteractableChanged;
 
@@ -82,6 +86,25 @@ protected:
 	// [웨폰 매니저 추가] 장착 무기 선택과 공격 판정을 담당한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	UWeaponManagerComponent* WeaponManagerComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mentality")
+	TObjectPtr<UPostProcessComponent> MentalityPostProcess;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Mentality", meta = (ClampMin = "1.0", ClampMax = "100.0"))
+	float MentalityDarkeningStartPercent = 75.0f;
+
+	/** 정신력이 0일 때 줄일 노출량(EV). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Mentality", meta = (ClampMin = "0.0", ClampMax = "5.0"))
+	float MentalityMaxDarkening = 2.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Mentality", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MentalityMaxVignette = 0.8f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Mentality", meta = (ClampMin = "0.1"))
+	float MentalityVisualInterpSpeed = 2.0f;
+
+	float MentalityVisualIntensity = 0.0f;
+	void UpdateMentalityVisuals(float DeltaTime);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float WalkSpeed = 450.0f;

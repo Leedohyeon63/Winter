@@ -15,6 +15,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "Subsystem/MonsterPoolSubsystem.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -101,7 +102,11 @@ bool ABaseMonster::ActivateFromPool(const FTransform& SpawnTransform)
 	ResetFleeing();
 	CancelPendingAttack();
 	NextAttackAllowedTime = 0.0f;
-	StopAnimMontage();
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		// 풀에서 재사용할 때 이전 사망 포즈와 몽타주의 블렌딩을 즉시 정리한다.
+		AnimInstance->Montage_Stop(0.0f);
+	}
 
 	// [몬스터 풀링 보완] 복원 중에는 충돌과 AI 판단이 실행되지 않게 한다.
 	SetActorEnableCollision(false);
@@ -364,12 +369,18 @@ void ABaseMonster::ResetFleeing()
 void ABaseMonster::BeginPlay()
 {
 	Super::BeginPlay();
-	CaptureInitialPoolState();
 
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		if (AttributeSet)
+		{
+			const float StartingHealth = FMath::Max(1.0f, InitialHealth);
+			AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), StartingHealth);
+			AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), StartingHealth);
+		}
 	}
+	CaptureInitialPoolState();
 
 	if (AbilitySystemComponent && AttributeSet)
 	{
@@ -588,26 +599,49 @@ void ABaseMonster::Die()
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	const uint32 DeathGeneration = LifeGeneration;
+	float DeathMontageDuration = 0.0f;
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		// 다른 Slot의 공격 몽타주도 종료한 뒤 사망 연출을 시작한다.
+		AnimInstance->Montage_Stop(0.0f);
+		if (DeathMontage && DeathMontage->RateScale > KINDA_SMALL_NUMBER)
+		{
+			DeathMontageDuration = AnimInstance->Montage_Play(
+				DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+			if (FAnimMontageInstance* DeathInstance = AnimInstance->GetActiveInstanceForMontage(DeathMontage))
+			{
+				// 공유 에셋은 바꾸지 않고 이 개체의 사망 재생만 마지막 포즈에 유지한다.
+				DeathInstance->bEnableAutoBlendOut = false;
+			}
+		}
+	}
+	if (!IsValid(this) || !bIsActiveMonster || !bIsDead || LifeGeneration != DeathGeneration)
+	{
+		return;
+	}
+
 	OnMonsterDied.Broadcast();
-	if (!IsValid(this) || !bIsActiveMonster)
+	if (!IsValid(this) || !bIsActiveMonster || !bIsDead || LifeGeneration != DeathGeneration)
 	{
 		return;
 	}
 
 	OnDeathStarted();
-	if (!IsValid(this) || !bIsActiveMonster)
+	if (!IsValid(this) || !bIsActiveMonster || !bIsDead || LifeGeneration != DeathGeneration)
 	{
 		return;
 	}
 
-	// [몬스터 풀링 추가] 0초면 즉시 반환하고, 지연값이 있으면 사망 연출 후 LifeSpanExpired에서 반환한다.
-	if (DestroyDelayAfterDeath <= KINDA_SMALL_NUMBER)
+	// 재생 속도를 반영한 몽타주 길이를 보장한다. 미지정/재생 실패 시 기존 지연값을 사용한다.
+	const float DeathDelay = FMath::Max(DestroyDelayAfterDeath, DeathMontageDuration);
+	if (DeathDelay <= KINDA_SMALL_NUMBER)
 	{
 		ReturnToPool();
 	}
 	else
 	{
-		SetLifeSpan(DestroyDelayAfterDeath);
+		SetLifeSpan(DeathDelay);
 	}
 }
 
@@ -647,12 +681,17 @@ bool ABaseMonster::ResetForPool(const bool bNotifyBlueprint)
 
 	// [몬스터 풀링 보완] 콜백 중 재진입해도 전투와 피격이 먼저 차단되도록 활성 플래그부터 내린다.
 	bIsActiveMonster = false;
+	// 사망 상태/몽타주를 초기화하기 전에 숨겨 대기 포즈가 노출되지 않게 한다.
+	SetActorHiddenInGame(true);
 	bIsDead = false;
 	bIsProvoked = false;
 	ResetFleeing();
 	CancelPendingAttack();
 	NextAttackAllowedTime = 0.0f;
-	StopAnimMontage();
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->Montage_Stop(0.0f);
+	}
 
 	if (AMonsterAIController* MonsterController = Cast<AMonsterAIController>(GetController()))
 	{
@@ -745,12 +784,13 @@ void ABaseMonster::CaptureInitialPoolState()
 	}
 	if (GetCapsuleComponent())
 	{
-		InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
+		// 풀 생성 중 액터 충돌은 꺼져 있으므로 소유자 상태를 제외한 원래 설정을 보존한다.
+		InitialCapsuleCollision = GetCapsuleComponent()->BodyInstance.GetCollisionEnabled(false);
 		bInitialCapsuleGenerateOverlapEvents = GetCapsuleComponent()->GetGenerateOverlapEvents();
 	}
 	if (USkeletalMeshComponent* MonsterMesh = GetMesh())
 	{
-		InitialMeshCollision = MonsterMesh->GetCollisionEnabled();
+		InitialMeshCollision = MonsterMesh->BodyInstance.GetCollisionEnabled(false);
 		InitialMeshRelativeTransform = MonsterMesh->GetRelativeTransform();
 		bInitialMeshTickEnabled = MonsterMesh->IsComponentTickEnabled();
 		bInitialMeshPauseAnims = MonsterMesh->bPauseAnims;

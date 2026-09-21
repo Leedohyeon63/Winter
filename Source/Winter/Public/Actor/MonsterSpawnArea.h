@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "DataAsset/MentalityWorldConfigDataAsset.h"
 #include "MonsterSpawnArea.generated.h"
 
 class ABaseMonster;
@@ -29,6 +30,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area")
 	TSubclassOf<ABaseMonster> MonsterClass;
+
+	/** 해당 단계의 클래스가 비어 있으면 기본 MonsterClass를 사용한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area|Mentality")
+	TMap<EMentalityWorldState, TSubclassOf<ABaseMonster>> MentalityMonsterOverrides;
+
+	UFUNCTION(BlueprintPure, Category = "Monster Spawn Area|Mentality")
+	TSubclassOf<ABaseMonster> GetEffectiveMonsterClass() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster Spawn Area")
 	bool bSpawnEnabled = true;

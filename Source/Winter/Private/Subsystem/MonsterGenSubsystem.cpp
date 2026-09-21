@@ -62,6 +62,7 @@ void UMonsterGenSubsystem::HandleMentalityWorldStateChanged(EMentalityWorldState
 {
 	ApplySpawnProfile(NewState);
 	RestartManageTimer();
+	ManageMonsters();
 }
 
 void UMonsterGenSubsystem::ApplySpawnProfile(EMentalityWorldState NewState)
@@ -131,7 +132,7 @@ void UMonsterGenSubsystem::ManageMonsters()
 		}
 		if (IsValid(Area))
 		{
-			const bool bInRange = Player && Area->bSpawnEnabled && Area->MonsterClass && Area->MaxMonsters > 0
+			const bool bInRange = Player && Area->bSpawnEnabled && Area->GetEffectiveMonsterClass() && Area->MaxMonsters > 0
 				&& ActiveMaxMonsters > 0 && Area->IntersectsPlayerRange(Player->GetActorLocation(), ActiveSpawnRadius);
 			Area->UpdateNavigation(bInRange || Area->GetActiveMonsterCount() > 0);
 		}

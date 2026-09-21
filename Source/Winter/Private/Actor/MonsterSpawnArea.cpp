@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "GameState/MainGameState.h"
 #include "Monster/BaseMonster.h"
 #include "NavigationInvokerComponent.h"
 #include "NavigationSystem.h"
@@ -90,8 +91,17 @@ int32 AMonsterSpawnArea::GetActiveMonsterCount() const
 	return Count;
 }
 
+TSubclassOf<ABaseMonster> AMonsterSpawnArea::GetEffectiveMonsterClass() const
+{
+	const AMainGameState* State = GetWorld() ? GetWorld()->GetGameState<AMainGameState>() : nullptr;
+	const TSubclassOf<ABaseMonster>* Override = MentalityMonsterOverrides.Find(
+		State ? State->CurrentMentalityWorldState : EMentalityWorldState::Stable);
+	return Override && *Override ? *Override : MonsterClass;
+}
+
 void AMonsterSpawnArea::RefreshMonsters(const FVector& PlayerLocation, float DespawnRadius, UMonsterPoolSubsystem& Pool)
 {
+	const TSubclassOf<ABaseMonster> DesiredClass = GetEffectiveMonsterClass();
 	const TArray<FAreaMonsterInstance> Instances = SpawnedMonsters;
 	for (const FAreaMonsterInstance& Instance : Instances)
 	{
@@ -101,7 +111,7 @@ void AMonsterSpawnArea::RefreshMonsters(const FVector& PlayerLocation, float Des
 		}
 		ABaseMonster* Monster = Instance.Monster.Get();
 		const bool bOwned = IsOwnedInstanceActive(Instance);
-		if (!bOwned || !bSpawnEnabled || Monster->GetClass() != MonsterClass.Get()
+		if (!bOwned || !bSpawnEnabled || Monster->GetClass() != DesiredClass.Get()
 			|| FVector::DistSquared(PlayerLocation, Monster->GetActorLocation()) > FMath::Square(DespawnRadius))
 		{
 			SpawnedMonsters.RemoveAll([&Instance](const FAreaMonsterInstance& Entry)
@@ -149,7 +159,8 @@ void AMonsterSpawnArea::UpdateNavigation(bool bNeeded)
 bool AMonsterSpawnArea::FindSpawnTransform(const FVector& PlayerLocation, float SpawnRadius, FTransform& OutTransform) const
 {
 	UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-	const ABaseMonster* Defaults = MonsterClass ? MonsterClass->GetDefaultObject<ABaseMonster>() : nullptr;
+	const TSubclassOf<ABaseMonster> DesiredClass = GetEffectiveMonsterClass();
+	const ABaseMonster* Defaults = DesiredClass ? DesiredClass->GetDefaultObject<ABaseMonster>() : nullptr;
 	if (!NavSystem || !Defaults || !SpawnBounds || !IntersectsPlayerRange(PlayerLocation, SpawnRadius))
 	{
 		return false;
@@ -194,7 +205,8 @@ bool AMonsterSpawnArea::FindSpawnTransform(const FVector& PlayerLocation, float 
 
 bool AMonsterSpawnArea::TrySpawnMonster(const FVector& PlayerLocation, float SpawnRadius, UMonsterPoolSubsystem& Pool)
 {
-	if (!bSpawnEnabled || !MonsterClass || GetActiveMonsterCount() >= FMath::Max(0, MaxMonsters)
+	const TSubclassOf<ABaseMonster> DesiredClass = GetEffectiveMonsterClass();
+	if (!bSpawnEnabled || !DesiredClass || GetActiveMonsterCount() >= FMath::Max(0, MaxMonsters)
 		|| GetWorld()->GetTimeSeconds() < NextSpawnTime)
 	{
 		return false;
@@ -204,17 +216,17 @@ bool AMonsterSpawnArea::TrySpawnMonster(const FVector& PlayerLocation, float Spa
 	{
 		return false;
 	}
-	if (ConfiguredPoolClass != MonsterClass)
+	if (ConfiguredPoolClass != DesiredClass)
 	{
-		Pool.ConfigurePool(MonsterClass, FMath::Min(MaxMonsters, 4), FMath::Max(MaxMonsters, 16));
-		ConfiguredPoolClass = MonsterClass;
+		Pool.ConfigurePool(DesiredClass, FMath::Min(MaxMonsters, 4), FMath::Max(MaxMonsters, 16));
+		ConfiguredPoolClass = DesiredClass;
 	}
-	ABaseMonster* Monster = Pool.AcquireMonster(MonsterClass, SpawnTransform);
+	ABaseMonster* Monster = Pool.AcquireMonster(DesiredClass, SpawnTransform);
 	if (!IsValid(Monster))
 	{
 		return false;
 	}
-	if (!IsValid(this) || IsActorBeingDestroyed() || !bSpawnEnabled || Monster->GetClass() != MonsterClass.Get())
+	if (!IsValid(this) || IsActorBeingDestroyed() || !bSpawnEnabled || Monster->GetClass() != GetEffectiveMonsterClass().Get())
 	{
 		Pool.ReleaseMonster(Monster);
 		return false;

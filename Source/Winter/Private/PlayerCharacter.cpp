@@ -10,6 +10,7 @@
 #include "Components/InteractableComponent.h"
 #include "Components/PlayerInventoryComponent.h"
 #include "Components/WeaponManagerComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -26,6 +27,12 @@ APlayerCharacter::APlayerCharacter()
 
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<UPlayerStatAttributeSet>(TEXT("AttributeSet"));
+	MentalityPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("MentalityPostProcess"));
+	MentalityPostProcess->SetupAttachment(GetRootComponent());
+	MentalityPostProcess->bUnbound = true;
+	MentalityPostProcess->Priority = 100.0f;
+	MentalityPostProcess->BlendWeight = 0.0f;
+	MentalityPostProcess->bEnabled = false;
 	InventoryComponent = CreateDefaultSubobject<UPlayerInventoryComponent>(TEXT("InventoryComponent"));
 	// [웨폰 매니저 추가] 인벤토리 장비 상태를 사용하는 공격 컴포넌트를 기본 서브오브젝트로 생성한다.
 	WeaponManagerComponent = CreateDefaultSubobject<UWeaponManagerComponent>(TEXT("WeaponManagerComponent"));
@@ -51,6 +58,7 @@ void APlayerCharacter::BeginPlay()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(this, &APlayerCharacter::HealthChangedCallback);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetStaminaAttribute()).AddUObject(this, &APlayerCharacter::StaminaChangedCallback);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetMentalityAttribute()).AddUObject(this, &APlayerCharacter::MentalityChangedCallback);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetMaxMentalityAttribute()).AddUObject(this, &APlayerCharacter::MentalityChangedCallback);
 
 		OnHealthChanged.Broadcast(AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
 		OnStaminaChanged.Broadcast(AttributeSet->GetStamina(), AttributeSet->GetMaxStamina());
@@ -143,11 +151,36 @@ void APlayerCharacter::UpdateMentalityWorldState(bool bForceBroadcast)
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateMentalityVisuals(DeltaTime);
 	if (bIsDead)
 	{
 		return;
 	}
 	CheckCrosshairHover();
+}
+
+void APlayerCharacter::UpdateMentalityVisuals(float DeltaTime)
+{
+	if (!MentalityPostProcess || !AttributeSet) return;
+	const bool bLocalView = IsLocallyControlled() && IsPlayerControlled();
+	MentalityPostProcess->bEnabled = bLocalView;
+	if (!bLocalView)
+	{
+		MentalityVisualIntensity = 0.0f;
+		MentalityPostProcess->BlendWeight = 0.0f;
+		return;
+	}
+	const float Percent = AttributeSet->GetMaxMentality() > KINDA_SMALL_NUMBER
+		? FMath::Clamp(100.0f * AttributeSet->GetMentality() / AttributeSet->GetMaxMentality(), 0.0f, 100.0f) : 0.0f;
+	const float Threshold = FMath::Clamp(MentalityDarkeningStartPercent, 1.0f, 100.0f);
+	const float Target = FMath::Clamp(1.0f - Percent / Threshold, 0.0f, 1.0f);
+	MentalityVisualIntensity = FMath::FInterpTo(MentalityVisualIntensity, Target, DeltaTime, FMath::Max(0.1f, MentalityVisualInterpSpeed));
+	if (FMath::IsNearlyEqual(MentalityVisualIntensity, Target, 0.001f)) MentalityVisualIntensity = Target;
+	MentalityPostProcess->Settings.bOverride_AutoExposureBias = true;
+	MentalityPostProcess->Settings.AutoExposureBias = -FMath::Clamp(MentalityMaxDarkening, 0.0f, 5.0f);
+	MentalityPostProcess->Settings.bOverride_VignetteIntensity = true;
+	MentalityPostProcess->Settings.VignetteIntensity = FMath::Clamp(MentalityMaxVignette, 0.0f, 1.0f);
+	MentalityPostProcess->BlendWeight = MentalityVisualIntensity;
 }
 
 // Called to bind functionality to input
@@ -450,7 +483,7 @@ void APlayerCharacter::MentalityChangedCallback(const FOnAttributeChangeData& Da
 {
 	if (AttributeSet)
 	{
-		OnMentalityChanged.Broadcast(Data.NewValue, AttributeSet->GetMaxMentality());
+		OnMentalityChanged.Broadcast(AttributeSet->GetMentality(), AttributeSet->GetMaxMentality());
 
 		// [멘탈리티 월드 상태 추가] GAS 값이 바뀔 때 중앙 계층이 새 단계를 계산하도록 요청한다.
 		UpdateMentalityWorldState(false);
