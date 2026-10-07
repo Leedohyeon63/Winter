@@ -10,6 +10,9 @@
 #include "Components/CapsuleComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BrainComponent.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "BehaviorTree/BTCompositeNode.h"
 #include "BehaviorTree/Tasks/BTTask_MoveTo.h"
 #include "Combat/MonsterDamageEffect.h"
@@ -115,6 +118,8 @@ bool FMonsterSpawnAreaLifecycleTest::RunTest(const FString& Parameters)
 	UMonsterGenSubsystem* Spawner = Fixture.World->GetSubsystem<UMonsterGenSubsystem>();
 	AMonsterSpawnArea* Area = Fixture.World->SpawnActor<AMonsterSpawnArea>();
 	Area->MonsterClass = ABaseMonster::StaticClass();
+	Area->MinimumPlayerDistance = 0.0f;
+	Area->bAvoidCameraView = false;
 	TestEqual(TEXT("Expanded player spawn radius"), Spawner->GetActiveSpawnRadius(), 10000.0f);
 	TestEqual(TEXT("Despawn hysteresis"), Spawner->GetActiveDespawnRadius(), 15000.0f);
 	TestFalse(TEXT("Missing navmesh cannot spawn"), Area->TrySpawnMonster(FVector::ZeroVector, 10000, *Pool));
@@ -158,6 +163,8 @@ bool FMonsterSpawnAreaNavigationTest::RunTest(const FString& Parameters)
 	AMonsterSpawnArea* Area = Fixture.World->SpawnActor<AMonsterSpawnArea>(FVector(500, 0, 300), FRotator::ZeroRotator);
 	Area->SpawnBounds->SetBoxExtent(FVector(400, 400, 500));
 	Area->MonsterClass = ABaseMonster::StaticClass();
+	Area->MinimumPlayerDistance = 0.0f;
+	Area->bAvoidCameraView = false;
 	Area->MaxMonsters = 1;
 	Spawner->ManageMonsters();
 	TestEqual(TEXT("Nearby designated area spawns"), Area->GetActiveMonsterCount(), 1);
@@ -175,6 +182,8 @@ bool FMonsterSpawnAreaNavigationTest::RunTest(const FString& Parameters)
 	AMonsterSpawnArea* Second = Fixture.World->SpawnActor<AMonsterSpawnArea>(FVector(0, 1000, 300), FRotator::ZeroRotator);
 	Second->SpawnBounds->SetBoxExtent(FVector(400, 400, 500));
 	Second->MonsterClass = ABaseMonster::StaticClass();
+	Second->MinimumPlayerDistance = 0.0f;
+	Second->bAvoidCameraView = false;
 	Spawner->ActiveMaxMonsters = 1;
 	Spawner->ManageMonsters();
 	TestEqual(TEXT("Shared population cap enforced"), Second->GetActiveMonsterCount(), 0);
@@ -359,6 +368,8 @@ bool FMentalityWorldEffectsTest::RunTest(const FString& Parameters)
 	AMonsterSpawnArea* Area = Fixture.World->SpawnActor<AMonsterSpawnArea>(FVector(600, 0, 200), FRotator::ZeroRotator);
 	Area->SpawnBounds->SetBoxExtent(FVector(250, 250, 400));
 	Area->MonsterClass = ABaseMonster::StaticClass();
+	Area->MinimumPlayerDistance = 0.0f;
+	Area->bAvoidCameraView = false;
 	Area->MaxMonsters = 1;
 	Area->SpawnInterval = 0.1f;
 	Area->MentalityMonsterOverrides.Add(EMentalityWorldState::Critical, Replacement);
@@ -394,6 +405,43 @@ bool FMentalityWorldEffectsTest::RunTest(const FString& Parameters)
 	PC->UnPossess();
 	Advance(0.1f);
 	TestFalse(TEXT("Unpossessed pawn cannot affect view"), PP->bEnabled);
+	Fixture.Wrapper.ForwardErrorMessages(this);
+	return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonsterSpawnSafetyTest, "Winter.MonsterSpawnArea.SpawnSafety",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonsterSpawnSafetyTest::RunTest(const FString& Parameters)
+{
+	MonsterSpawnAreaTests::FFixture Fixture;
+	if (!TestTrue(TEXT("Create world"), Fixture.Initialize()) || !TestTrue(TEXT("Build navigation"), Fixture.BuildNavigation())) return false;
+	APlayerController* PC = Fixture.World->SpawnActor<APlayerController>();
+	ACameraActor* Camera = Fixture.World->SpawnActor<ACameraActor>(FVector(0, 0, 100), FRotator::ZeroRotator);
+	Camera->GetCameraComponent()->SetFieldOfView(90.0f);
+	PC->SetViewTarget(Camera);
+	PC->PlayerCameraManager->UpdateCamera(0.01f);
+	AMonsterSpawnArea* Area = Fixture.World->SpawnActor<AMonsterSpawnArea>(FVector(-1500, 0, 200), FRotator::ZeroRotator);
+	Area->MonsterClass = ABaseMonster::StaticClass();
+	Area->SpawnBounds->SetBoxExtent(FVector(100, 100, 300));
+	const FVector PlayerLocation(0, 0, 100);
+	TestFalse(TEXT("Nearby rear spawn rejected"), Area->IsSpawnPresentationAllowed(FVector(-500, 0, 100), PlayerLocation, 88));
+	TestFalse(TEXT("Visible front spawn rejected"), Area->IsSpawnPresentationAllowed(FVector(1500, 0, 100), PlayerLocation, 88));
+	TestFalse(TEXT("Screen-edge body overlap rejected"), Area->IsSpawnPresentationAllowed(FVector(1500, 1500, 100), PlayerLocation, 200));
+	TestTrue(TEXT("Distant rear spawn allowed"), Area->IsSpawnPresentationAllowed(FVector(-1500, 0, 100), PlayerLocation, 88));
+	UMonsterPoolSubsystem* Pool = Fixture.World->GetSubsystem<UMonsterPoolSubsystem>();
+	Area->SetActorLocation(FVector(1500, 0, 200));
+	TestFalse(TEXT("Visible area cannot actually spawn"), Area->TrySpawnMonster(PlayerLocation, 10000, *Pool));
+	Area->SetActorLocation(FVector(-300, 0, 200));
+	TestFalse(TEXT("Nearby area cannot actually spawn"), Area->TrySpawnMonster(PlayerLocation, 10000, *Pool));
+	Area->SetActorLocation(FVector(-1500, 0, 200));
+	TestTrue(TEXT("Hidden distant area actually spawns"), Area->TrySpawnMonster(PlayerLocation, 10000, *Pool));
+	Camera->SetActorRotation(FRotator(0, 180, 0));
+	PC->PlayerCameraManager->UpdateCamera(0.01f);
+	TestFalse(TEXT("Camera turn updates rejected direction"), Area->IsSpawnPresentationAllowed(FVector(-1500, 0, 100), PlayerLocation, 88));
+	Area->bAvoidCameraView = false;
+	TestTrue(TEXT("Area can explicitly opt out of view restriction"), Area->IsSpawnPresentationAllowed(FVector(-1500, 0, 100), PlayerLocation, 88));
+	TestFalse(TEXT("View opt-out preserves proximity restriction"), Area->IsSpawnPresentationAllowed(FVector(-500, 0, 100), PlayerLocation, 88));
 	Fixture.Wrapper.ForwardErrorMessages(this);
 	return !HasAnyErrors();
 }

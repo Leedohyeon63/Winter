@@ -47,6 +47,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area", meta = (ClampMin = "0.1", Units = "s"))
 	float SpawnInterval = 2.0f;
 
+	/** 플레이어와 몬스터 외곽 사이에 확보할 최소 수평 거리. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area|Spawn Safety", meta = (ClampMin = "0.0", Units = "cm"))
+	float MinimumPlayerDistance = 1000.0f;
+
+	/** 벽 뒤라도 카메라 시야 방향에 걸치면 보수적으로 생성하지 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area|Spawn Safety")
+	bool bAvoidCameraView = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Spawn Area|Spawn Safety", meta = (ClampMin = "0.0", ClampMax = "30.0", Units = "deg"))
+	float ViewSafetyMargin = 10.0f;
+
 	UFUNCTION(BlueprintPure, Category = "Monster Spawn Area")
 	int32 GetActiveMonsterCount() const;
 
@@ -71,9 +82,11 @@ protected:
 private:
 	bool IsOwnedInstanceActive(const FAreaMonsterInstance& Instance) const;
 	bool FindSpawnTransform(const FVector& PlayerLocation, float SpawnRadius, FTransform& OutTransform) const;
+	bool IsSpawnPresentationAllowed(const FVector& Location, const FVector& PlayerLocation, float BoundsRadius) const;
 	TArray<FAreaMonsterInstance> SpawnedMonsters;
 	TSubclassOf<ABaseMonster> ConfiguredPoolClass;
 	double NextSpawnTime = 0.0;
 
 	friend class FMonsterSpawnAreaLifecycleTest;
+	friend class FMonsterSpawnSafetyTest;
 };

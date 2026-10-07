@@ -2,6 +2,11 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "GameState/MainGameState.h"
 #include "Monster/BaseMonster.h"
@@ -156,6 +161,37 @@ void AMonsterSpawnArea::UpdateNavigation(bool bNeeded)
 	}
 }
 
+bool AMonsterSpawnArea::IsSpawnPresentationAllowed(const FVector& Location, const FVector& PlayerLocation, float BoundsRadius) const
+{
+	const float SafeRadius = FMath::Max(0.0f, BoundsRadius);
+	if (FVector::DistSquared2D(Location, PlayerLocation) < FMath::Square(FMath::Max(0.0f, MinimumPlayerDistance) + SafeRadius)) return false;
+	if (!bAvoidCameraView) return true;
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PC || !PC->PlayerCameraManager) return false;
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
+	const FVector ToSpawn = Location - CameraLocation;
+	const float Distance = ToSpawn.Size();
+	if (Distance <= SafeRadius) return false;
+	const FMinimalViewInfo& View = PC->PlayerCameraManager->GetCameraCacheView();
+	// Orthographic cameras need a different volume test; defer spawning instead of risking a visible pop-in.
+	if (View.ProjectionMode != ECameraProjectionMode::Perspective) return false;
+	const float HalfFov = FMath::DegreesToRadians(FMath::Clamp(PC->PlayerCameraManager->GetFOVAngle(), 1.0f, 170.0f) * 0.5f);
+	float Aspect = FMath::Max(0.1f, View.AspectRatio);
+	int32 Width = 0, Height = 0;
+	PC->GetViewportSize(Width, Height);
+	if (!View.bConstrainAspectRatio && Width > 0 && Height > 0)
+	{
+		Aspect = FMath::Min(Aspect, static_cast<float>(Width) / Height);
+	}
+	// A cone containing all four screen corners also covers wide/tall viewports conservatively.
+	const float HalfCone = FMath::Atan(FMath::Tan(HalfFov) * FMath::Sqrt(1.0f + 1.0f / FMath::Square(Aspect)));
+	const float ExpandedCone = FMath::Min(PI, HalfCone + FMath::Asin(FMath::Clamp(SafeRadius / Distance, 0.0f, 1.0f))
+		+ FMath::DegreesToRadians(FMath::Clamp(ViewSafetyMargin, 0.0f, 30.0f)));
+	return FVector::DotProduct(CameraRotation.Vector(), ToSpawn / Distance) < FMath::Cos(ExpandedCone);
+}
+
 bool AMonsterSpawnArea::FindSpawnTransform(const FVector& PlayerLocation, float SpawnRadius, FTransform& OutTransform) const
 {
 	UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
@@ -166,6 +202,15 @@ bool AMonsterSpawnArea::FindSpawnTransform(const FVector& PlayerLocation, float 
 		return false;
 	}
 	const UCapsuleComponent* Capsule = Defaults->GetCapsuleComponent();
+	float BoundsRadius = Capsule->GetScaledCapsuleHalfHeight();
+	if (const USkeletalMeshComponent* Mesh = Defaults->GetMesh())
+	{
+		if (const USkeletalMesh* Asset = Mesh->GetSkeletalMeshAsset())
+		{
+			const FBoxSphereBounds MeshBounds = Asset->GetBounds().TransformBy(Mesh->GetRelativeTransform());
+			BoundsRadius = FMath::Max(BoundsRadius, static_cast<float>(MeshBounds.Origin.Size() + MeshBounds.SphereRadius));
+		}
+	}
 	// 전체 구역이 아닌 플레이어 범위와 겹치는 AABB를 샘플링해 먼 구역의 가장자리도 처리한다.
 	const FBox CandidateBounds = SpawnBounds->Bounds.GetBox().Overlap(
 		FBox(PlayerLocation - FVector(SpawnRadius), PlayerLocation + FVector(SpawnRadius)));
@@ -189,6 +234,7 @@ bool AMonsterSpawnArea::FindSpawnTransform(const FVector& PlayerLocation, float 
 		{
 			continue;
 		}
+		if (!IsSpawnPresentationAllowed(SpawnLocation, PlayerLocation, BoundsRadius)) continue;
 		const FQuat Rotation = SpawnBounds->GetComponentQuat();
 		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(MonsterAreaSpawn), false, this);
 		if (GetWorld()->OverlapBlockingTestByProfile(SpawnLocation, FQuat::Identity,
