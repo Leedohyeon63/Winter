@@ -4,7 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "ItemSpawner.generated.h"
 
-class ASpawnerPickupActor;
+class APickupActor;
+struct FWeightedItemSpawnEntry;
 class UArrowComponent;
 class UItemSpawnStateSubsystem;
 class UItemSpawnTableDataAsset;
@@ -45,7 +46,7 @@ protected:
 
 	/** 항목별 PickupActorClass가 비어 있을 때 사용할 기본 클래스다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Spawner")
-	TSubclassOf<ASpawnerPickupActor> DefaultPickupActorClass;
+	TSubclassOf<APickupActor> DefaultPickupActorClass;
 
 	/**
 	 * 맵 안에서 중복되지 않는 ID다. 비어 있으면 배치된 액터 이름을 사용한다.
@@ -79,13 +80,16 @@ protected:
 
 private:
 	FName BuildSpawnerStateKey() const;
-	int32 SelectWeightedEntry(FRandomStream& RandomStream) const;
+	// False means a configuration error; true with INDEX_NONE is a valid empty roll.
+	bool TrySelectWeightedEntry(FRandomStream& RandomStream, int32& OutEntryIndex,
+		TSubclassOf<APickupActor>& OutPickupClass) const;
+	TSubclassOf<APickupActor> ResolvePickupClass(const FWeightedItemSpawnEntry& Entry) const;
 	bool SpawnSelectedEntry(
-		int32 EntryIndex,
+		TSubclassOf<APickupActor> PickupClass,
 		int32 Quantity,
 		float RandomYaw,
 		FName SpawnerStateKey);
 
 	UPROPERTY(Transient)
-	TObjectPtr<ASpawnerPickupActor> SpawnedPickup;
+	TObjectPtr<APickupActor> SpawnedPickup;
 };

@@ -18,6 +18,11 @@ class WINTER_API APickupActor : public AActor
 public:
 	APickupActor();
 
+	/** Initialize before FinishSpawningActor. */
+	void InitializeFromSpawner(int32 InQuantity, FName InSpawnerStateKey);
+
+	UItemDefinitionDataAsset* GetItemDefinition() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -44,4 +49,7 @@ private:
 	void HandleInteract(AActor* Interactor);
 
 	void RefreshPrompt();
+	void SaveSpawnerQuantity();
+
+	FName SpawnerStateKey = NAME_None;
 };

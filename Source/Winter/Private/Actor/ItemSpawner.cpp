@@ -1,5 +1,6 @@
 #include "Actor/ItemSpawner.h"
 
+#include "Actor/PickupActor.h"
 #include "Actor/SpawnerPickupActor.h"
 #include "Components/ArrowComponent.h"
 #include "Components/SceneComponent.h"
@@ -55,6 +56,7 @@ bool AItemSpawner::SpawnItem()
 
 	const FName SpawnerStateKey = BuildSpawnerStateKey();
 	int32 SelectedEntryIndex = INDEX_NONE;
+	TSubclassOf<APickupActor> SelectedPickupClass;
 	int32 SelectedQuantity = 0;
 	float SelectedRandomYaw = 0.0f;
 
@@ -68,6 +70,13 @@ bool AItemSpawner::SpawnItem()
 		}
 
 		SelectedEntryIndex = ExistingState->SelectedEntryIndex;
+		if (!SpawnTable->Entries.IsValidIndex(SelectedEntryIndex))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ItemSpawner] Saved entry is missing. Key=%s Entry=%d"),
+				*SpawnerStateKey.ToString(), SelectedEntryIndex);
+			return false;
+		}
+		SelectedPickupClass = ResolvePickupClass(SpawnTable->Entries[SelectedEntryIndex]);
 		SelectedQuantity = ExistingState->RemainingQuantity;
 		SelectedRandomYaw = ExistingState->RandomYaw;
 	}
@@ -78,7 +87,10 @@ bool AItemSpawner::SpawnItem()
 			: StateSubsystem->MakeRandomSeed(SpawnerStateKey);
 		FRandomStream RandomStream(RandomSeed);
 
-		SelectedEntryIndex = SelectWeightedEntry(RandomStream);
+		if (!TrySelectWeightedEntry(RandomStream, SelectedEntryIndex, SelectedPickupClass))
+		{
+			return false;
+		}
 		if (!SpawnTable->Entries.IsValidIndex(SelectedEntryIndex))
 		{
 			// INDEX_NONE을 저장해 레벨을 다시 열어도 재추첨하지 않게 한다.
@@ -111,7 +123,7 @@ bool AItemSpawner::SpawnItem()
 	}
 
 	return SpawnSelectedEntry(
-		SelectedEntryIndex,
+		SelectedPickupClass,
 		SelectedQuantity,
 		SelectedRandomYaw,
 		SpawnerStateKey);
@@ -130,82 +142,98 @@ FName AItemSpawner::BuildSpawnerStateKey() const
 	return FName(*FString::Printf(TEXT("%s::%s"), *MapName, *EffectiveSpawnerId.ToString()));
 }
 
-int32 AItemSpawner::SelectWeightedEntry(FRandomStream& RandomStream) const
+bool AItemSpawner::TrySelectWeightedEntry(
+	FRandomStream& RandomStream,
+	int32& OutEntryIndex,
+	TSubclassOf<APickupActor>& OutPickupClass) const
 {
+	OutEntryIndex = INDEX_NONE;
+	OutPickupClass = nullptr;
 	if (!SpawnTable)
-	{
-		return INDEX_NONE;
-	}
-
-	float TotalWeight = FMath::Max(0.0f, SpawnTable->EmptyWeight);
-	for (const FWeightedItemSpawnEntry& Entry : SpawnTable->Entries)
-	{
-		if (Entry.ItemDefinition && Entry.Weight > 0.0f)
-		{
-			TotalWeight += Entry.Weight;
-		}
-	}
-
-	if (TotalWeight <= 0.0f)
-	{
-		return INDEX_NONE;
-	}
-
-	float Roll = RandomStream.FRandRange(0.0f, TotalWeight);
-	const float EmptyWeight = FMath::Max(0.0f, SpawnTable->EmptyWeight);
-	if (Roll < EmptyWeight)
-	{
-		return INDEX_NONE;
-	}
-	Roll -= EmptyWeight;
-
-	for (int32 EntryIndex = 0; EntryIndex < SpawnTable->Entries.Num(); ++EntryIndex)
-	{
-		const FWeightedItemSpawnEntry& Entry = SpawnTable->Entries[EntryIndex];
-		if (!Entry.ItemDefinition || Entry.Weight <= 0.0f)
-		{
-			continue;
-		}
-
-		if (Roll < Entry.Weight)
-		{
-			return EntryIndex;
-		}
-		Roll -= Entry.Weight;
-	}
-
-	// 부동소수점 경계값 때문에 끝까지 도달한 경우 마지막 유효 항목을 선택한다.
-	for (int32 EntryIndex = SpawnTable->Entries.Num() - 1; EntryIndex >= 0; --EntryIndex)
-	{
-		const FWeightedItemSpawnEntry& Entry = SpawnTable->Entries[EntryIndex];
-		if (Entry.ItemDefinition && Entry.Weight > 0.0f)
-		{
-			return EntryIndex;
-		}
-	}
-
-	return INDEX_NONE;
-}
-
-bool AItemSpawner::SpawnSelectedEntry(
-	const int32 EntryIndex,
-	const int32 Quantity,
-	const float RandomYaw,
-	const FName SpawnerStateKey)
-{
-	if (!SpawnTable || !SpawnTable->Entries.IsValidIndex(EntryIndex) || !GetWorld())
 	{
 		return false;
 	}
 
-	const FWeightedItemSpawnEntry& Entry = SpawnTable->Entries[EntryIndex];
-	TSubclassOf<ASpawnerPickupActor> PickupClass = Entry.PickupActorClass;
-	if (!PickupClass)
+	struct FCandidate
 	{
-		PickupClass = DefaultPickupActorClass;
+		int32 EntryIndex;
+		float Weight;
+		TSubclassOf<APickupActor> PickupClass;
+	};
+	TArray<FCandidate, TInlineAllocator<32>> Candidates;
+	bool bHasInvalidEntry = false;
+	const float EmptyWeight = FMath::Max(0.0f, SpawnTable->EmptyWeight);
+	float TotalWeight = EmptyWeight;
+	for (int32 Index = 0; Index < SpawnTable->Entries.Num(); ++Index)
+	{
+		const FWeightedItemSpawnEntry& Entry = SpawnTable->Entries[Index];
+		// Zero-weight entries are intentionally disabled.
+		if (Entry.Weight <= 0.0f)
+		{
+			continue;
+		}
+
+		const TSubclassOf<APickupActor> PickupClass = ResolvePickupClass(Entry);
+		if (!FMath::IsFinite(Entry.Weight) || !PickupClass)
+		{
+			bHasInvalidEntry = true;
+			UE_LOG(LogTemp, Warning,
+				TEXT("[ItemSpawner] Invalid entry skipped. Spawner=%s Table=%s Entry=%d: check Weight, PickupActorClass and the BP default ItemDefinition."),
+				*GetPathName(), *GetPathNameSafe(SpawnTable), Index);
+			continue;
+		}
+		Candidates.Add({Index, Entry.Weight, PickupClass});
+		TotalWeight += Entry.Weight;
 	}
 
-	if (!PickupClass || !Entry.ItemDefinition)
+	// Misconfigured active entries must not turn into a persistent empty result.
+	// An explicitly empty-only table (no active entries, positive EmptyWeight) is valid.
+	if ((Candidates.IsEmpty() && bHasInvalidEntry)
+		|| !FMath::IsFinite(SpawnTable->EmptyWeight)
+		|| !FMath::IsFinite(TotalWeight) || TotalWeight <= 0.0f)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ItemSpawner] Invalid spawn table; no result saved. Spawner=%s Table=%s: configure a valid pickup entry or EmptyWeight."),
+			*GetPathName(), *GetPathNameSafe(SpawnTable));
+		return false;
+	}
+
+	float Roll = RandomStream.FRandRange(0.0f, TotalWeight);
+	if (Roll < EmptyWeight || Candidates.IsEmpty())
+	{
+		return true;
+	}
+	Roll -= EmptyWeight;
+	for (const FCandidate& Candidate : Candidates)
+	{
+		if (Roll < Candidate.Weight)
+		{
+			OutEntryIndex = Candidate.EntryIndex;
+			OutPickupClass = Candidate.PickupClass;
+			return true;
+		}
+		Roll -= Candidate.Weight;
+	}
+
+	// Reuse the last validated candidate for floating-point boundary rounding.
+	OutEntryIndex = Candidates.Last().EntryIndex;
+	OutPickupClass = Candidates.Last().PickupClass;
+	return true;
+}
+
+
+bool AItemSpawner::SpawnSelectedEntry(
+	const TSubclassOf<APickupActor> PickupClass,
+	const int32 Quantity,
+	const float RandomYaw,
+	const FName SpawnerStateKey)
+{
+	if (!GetWorld())
+	{
+		return false;
+	}
+
+	if (!PickupClass)
 	{
 		UE_LOG(
 			LogTemp,
@@ -220,8 +248,8 @@ bool AItemSpawner::SpawnSelectedEntry(
 	FinalRotation.Yaw += RandomYaw;
 	const FTransform SpawnTransform(FinalRotation, SpawnLocation);
 
-	// [아이템 스포너 추가] BeginPlay 전에 ItemDefinition과 Quantity를 넣기 위해 Deferred Spawn을 사용한다.
-	ASpawnerPickupActor* DeferredPickup = GetWorld()->SpawnActorDeferred<ASpawnerPickupActor>(
+	// [아이템 스포너 추가] 아이템 데이터는 BP 기본값을 유지하고, BeginPlay 전에 수량과 스폰 기록만 설정한다.
+	APickupActor* DeferredPickup = GetWorld()->SpawnActorDeferred<APickupActor>(
 		PickupClass,
 		SpawnTransform,
 		this,
@@ -234,8 +262,8 @@ bool AItemSpawner::SpawnSelectedEntry(
 		return false;
 	}
 
-	DeferredPickup->InitializeFromSpawner(Entry.ItemDefinition, Quantity, SpawnerStateKey);
-	SpawnedPickup = Cast<ASpawnerPickupActor>(UGameplayStatics::FinishSpawningActor(
+	DeferredPickup->InitializeFromSpawner(Quantity, SpawnerStateKey);
+	SpawnedPickup = Cast<APickupActor>(UGameplayStatics::FinishSpawningActor(
 		DeferredPickup,
 		SpawnTransform));
 
@@ -244,8 +272,22 @@ bool AItemSpawner::SpawnSelectedEntry(
 		Log,
 		TEXT("[ItemSpawner] Spawned. Key=%s Item=%s Quantity=%d"),
 		*SpawnerStateKey.ToString(),
-		*GetNameSafe(Entry.ItemDefinition),
+		*GetNameSafe(DeferredPickup->GetItemDefinition()),
 		Quantity);
 
 	return IsValid(SpawnedPickup);
+}
+
+TSubclassOf<APickupActor> AItemSpawner::ResolvePickupClass(const FWeightedItemSpawnEntry& Entry) const
+{
+	const TSubclassOf<APickupActor> PickupClass = Entry.PickupActorClass
+		? Entry.PickupActorClass : DefaultPickupActorClass;
+	if (!PickupClass || PickupClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return nullptr;
+	}
+
+	// Item data belongs to the pickup BP. Exclude unconfigured BPs from the lottery.
+	const APickupActor* Defaults = PickupClass->GetDefaultObject<APickupActor>();
+	return Defaults && IsValid(Defaults->GetItemDefinition()) ? PickupClass : nullptr;
 }

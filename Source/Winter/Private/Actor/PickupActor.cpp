@@ -1,4 +1,6 @@
 #include "Actor/PickupActor.h"
+#include "Engine/GameInstance.h"
+#include "Subsystem/ItemSpawnStateSubsystem.h"
 #include "Components/InteractableComponent.h"
 #include "Components/SphereComponent.h" 
 #include "Components/StaticMeshComponent.h"
@@ -63,6 +65,7 @@ void APickupActor::HandleInteract(AActor* Interactor)
 	}
 
 	Quantity -= AddedQuantity;
+	SaveSpawnerQuantity();
 	if (Quantity <= 0)
 	{
 		InteractableComponent->SetInteractionEnabled(false);
@@ -83,4 +86,40 @@ void APickupActor::RefreshPrompt()
 	InteractableComponent->PromptText = Quantity > 1
 		? FString::Printf(TEXT("%s x%d 줍기 [F]"), *ItemDefinition->DisplayName.ToString(), Quantity)
 		: FString::Printf(TEXT("%s 줍기 [F]"), *ItemDefinition->DisplayName.ToString());
+}
+
+void APickupActor::InitializeFromSpawner(
+	const int32 InQuantity, const FName InSpawnerStateKey)
+{
+	Quantity = FMath::Max(1, InQuantity);
+	SpawnerStateKey = InSpawnerStateKey;
+}
+
+void APickupActor::SaveSpawnerQuantity()
+{
+	if (SpawnerStateKey.IsNone())
+	{
+		return;
+	}
+	UGameInstance* GameInstance = GetGameInstance();
+	UItemSpawnStateSubsystem* StateSubsystem = GameInstance
+		? GameInstance->GetSubsystem<UItemSpawnStateSubsystem>() : nullptr;
+	if (!StateSubsystem)
+	{
+		return;
+	}
+	// Save before Destroy so full and partial pickups both survive level travel.
+	if (Quantity <= 0)
+	{
+		StateSubsystem->MarkConsumed(SpawnerStateKey);
+	}
+	else
+	{
+		StateSubsystem->UpdateRemainingQuantity(SpawnerStateKey, Quantity);
+	}
+}
+
+UItemDefinitionDataAsset* APickupActor::GetItemDefinition() const
+{
+	return ItemDefinition.Get();
 }

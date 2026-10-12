@@ -4,8 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "ItemSpawnTableDataAsset.generated.h"
 
-class ASpawnerPickupActor;
-class UItemDefinitionDataAsset;
+class APickupActor;
 
 /**
  * [아이템 스포너 추가]
@@ -16,16 +15,12 @@ struct WINTER_API FWeightedItemSpawnEntry
 {
 	GENERATED_BODY()
 
-	/** 생성할 아이템 데이터다. 비어 있는 항목은 추첨에서 제외된다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn")
-	TObjectPtr<UItemDefinitionDataAsset> ItemDefinition = nullptr;
-
 	/**
 	 * 이 항목에 사용할 Pickup 블루프린트 클래스다.
 	 * 비어 있으면 스포너의 DefaultPickupActorClass를 사용한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn")
-	TSubclassOf<ASpawnerPickupActor> PickupActorClass;
+	TSubclassOf<APickupActor> PickupActorClass;
 
 	/** 다른 항목과 비교할 상대 가중치다. 0이면 생성되지 않는다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "0.0"))
